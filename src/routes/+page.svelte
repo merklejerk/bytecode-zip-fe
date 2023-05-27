@@ -32,7 +32,7 @@
         position: fixed;
         font-family: 'Atari';
         
-        .text-input {
+        > .text-input {
             color: var(--console-text-color);
             margin: 0;
             padding: 0;
@@ -47,7 +47,7 @@
             min-height: 100%;
             user-select: none;
 
-            .caret {
+            > .caret {
                 display: inline-block;
                 background-color: var(--console-text-color);
                 width: 1ex;
@@ -57,7 +57,30 @@
             }
         }
 
-        .crt-effect-1 {
+        > .panel-container {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+
+            > .tip {
+                text-align: start;
+                align-self: center;
+            }
+            > .letter-panel {
+                background-color: rgb(108 161 139);
+                color: white;
+                padding: 2em;
+                text-align: center;
+            }
+            > .hidden {
+                display: none;
+            }
+        }
+
+
+        > .crt-effect-1 {
             --crt-glow-1: 196, 146, 194;
 
             position: absolute;
@@ -71,13 +94,13 @@
             gap: 1em;
             box-shadow: inset 0 0 min(10vh,10vw) rgba(27, 2, 10, 0.75);
             
-            .crt-line {
+            > .crt-line {
                 width: 100%;
                 height: 0.1em;
                 box-shadow: 0 0 1em rgba(var(--crt-glow-1), 0.05);
                 background-color: rgba(var(--crt-glow-1), 0.0075);
             }
-            .crt-scan-line {
+            > .crt-scan-line {
                 animation: scan-line-animation 2s linear 0s infinite;
                 position: absolute;
                 width: 100%;
@@ -123,6 +146,18 @@
         {:else}
             <span class="caret" />
         {/if}
+    </div>
+    <div class="panel-container">
+        <div class="tip" class:hidden={!!bytecode}>
+            <ul>
+                <li>Paste initcode</li>
+                <li>Paste solc build artifact (JSON)</li>
+                <li>Drop solc build artifact (JSON)</li>
+            </ul>
+        </div>
+        <div class="letter-panel" class:hidden={!bytecode}>
+            Hello, world!
+        </div>
     </div>
     <div class="crt-effect-1">
         {#each new Array(15) as n}
