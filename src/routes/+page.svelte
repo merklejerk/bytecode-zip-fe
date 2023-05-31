@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { browser } from "$app/environment";
+    import type { Abi } from 'viem';
     import { onMount } from "svelte";
     import Panel from "../lib/panel.svelte";
     import HexEditor from "../lib/hex-editor.svelte";
@@ -20,17 +20,40 @@
     let bytecode: string | undefined;
     let textInput: HTMLDivElement;
     let status: string | undefined;
+    let statusTimer: NodeJS.Timer | undefined;
+    let abi: Abi | undefined;
    
-    $: status = bytecode ? '<ESC> to clear' : 'Waiting for input...';
 
-    function pasteHandler(e: ClipboardEvent) {
-        setBytecode(e
-            .clipboardData?.getData("text")
-            .replaceAll(/\s+/g, '')
-        );
+    function setArtifactJSON(json: string) {
+        let artifact;
+        try {
+            artifact = JSON.parse(json)
+        } catch {
+            throw new Error(`Invalid JSON file!`);
+        }
+        if (typeof(artifact) !== 'object') {
+            throw new Error(`Invalid build artifact file!'`);
+        }
+        abi = artifact.abi;
+        setBytecode(getArtifactBytecode(artifact));
+    }
+
+    function getArtifactBytecode(artifact: any): string {
+        const r = artifact.bytecode?.object ||
+            artifact.bytecode ||
+            artifact.compilerOutput?.bytecode?.object ||
+            artifact.creationCode ||
+            artifact.initCode;
+        if (typeof(r) !== 'string') {
+            throw new Error(`Invalid build artifact!`);
+        }
+        return r;
     }
 
     function setBytecode(newBytecode: string) {
+        if (typeof(newBytecode) !== 'string') {
+            throw new Error(`Invalid bytecode!`);
+        }
         if (newBytecode.match(/^0x/i)) {
             newBytecode = newBytecode.slice(2);
         }
@@ -38,13 +61,52 @@
             bytecode = undefined;
         }
         if (!newBytecode.match(/^([a-f0-9]{2})+$/i)) {
-            throw new Error(`Invalid bytecode: ${newBytecode.slice(0,100)}...`);
+            throw new Error(`Invalid bytecode!`);
         }
         bytecode = newBytecode;
     }
 
-    function dropHandler(e: DragEvent) {
-        console.log(e.dataTransfer?.files);
+    function setStatus(newStatus: string | undefined) {
+        if (statusTimer) {
+            clearInterval(statusTimer);
+            statusTimer = undefined;
+        }
+        status = newStatus;
+        if (newStatus !== undefined) {
+            statusTimer = setTimeout(() => status = undefined, 6e3);
+        }
+    }
+
+    function pasteHandler(e: ClipboardEvent) {
+        const raw = e.clipboardData?.getData('text');
+        try {
+            if (!(raw?.match(/^(0x)?([a-f0-9]{2})+$/i))) {
+                setArtifactJSON(raw);
+            } else {
+                abi = undefined;
+                setBytecode(raw);
+            }
+            setStatus(undefined);
+        } catch (err: any) {
+            setStatus(err.message);
+            throw err;
+        }
+    }
+
+    async function dropHandler(e: DragEvent) {
+        let item = [...(e.dataTransfer?.items || [])]
+            .find(i => i.kind === 'file' && i.type === 'application/json');
+        try {
+            if (!item) {
+                throw new Error(`Invalid build artifact file!`);
+            }
+            const contents = await item.getAsFile()!.text();
+            setArtifactJSON(contents);
+            setStatus(undefined);
+        } catch (err: any) {
+            setStatus(err.message);
+            throw err;
+        }
     }
 
     function keyHandler(e: KeyboardEvent) {
@@ -171,28 +233,28 @@
                 background-image: linear-gradient(
                         -160deg,
                         rgba(#dbaa09, 0) 0%,
-                        rgba(#dbaa09, 0.1) 66%,
+                        rgba(#dbaa09, 0.175) 66%,
                         rgba(#dbaa09, 0.33) 100%
                     );
+                mix-blend-mode: hard-light;
             }
             > .crt-effect-3 {
-                // display: none;
                 position: absolute;
                 left: 5vw;
                 top: 1vh;
                 right: 1vw;
                 bottom: 16vh;
                 border-radius: 0 5vmax 0 0;
-                box-shadow: inset min(-11vmin, -5rem) max(12vmin, 6rem) 0 rgba(rgb(137, 216, 135), 0.28);
+                box-shadow: inset min(-11vmin, -5rem) max(12vmin, 6rem) 0 rgba(rgb(137, 216, 135), 0.25);
                 filter: blur(max(75px, min(4vmax, 96px)));
             }
             > .crt-line {
                 width: 100%;
                 height: 0.15em;
-                box-shadow: 0 0 1em rgba(var(--crt-glow-1), 0.4);
+                box-shadow: 0 0 1em rgba(var(--crt-glow-1), 0.275);
             }
             > .crt-scan-line {
-                animation: scan-line-animation 2s linear 0s infinite;
+                animation: scan-line-animation 8s linear 0s infinite;
                 position: absolute;
                 width: 100%;
                 height: 33vh;
@@ -200,8 +262,8 @@
                 background-image: linear-gradient(
                     rgba(var(--crt-glow-1), 0) 0%,
                     rgba(var(--crt-glow-1), 0.08) 85%,
-                    rgba(var(--crt-glow-1), 0.1) 99%,
-                    rgba(var(--crt-glow-1), 0.5) 100%
+                    rgba(var(--crt-glow-1), 0.075) 99%,
+                    rgba(var(--crt-glow-1), 0.3) 100%
                 );
             }
         }
@@ -244,7 +306,15 @@
                 </Panel>
             </div>
             <div class="status-bar">
-                {#if status}{status}{:else}{@html '&nbsp;' }{/if}
+                {(() => {
+                    if (status) {
+                        return status;
+                    }
+                    if (bytecode) {
+                        return '<ESC> to clear';
+                    }
+                    return 'Waiting for input...';
+                })()}
             </div>
         </div>
         {#if !bytecode}
