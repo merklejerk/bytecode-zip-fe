@@ -26,7 +26,6 @@
     function pasteHandler(e: ClipboardEvent) {
         bytecode = e.clipboardData?.getData("text")
             .replaceAll(/\s+/g, '');
-        console.log('foo', bytecode);
     }
 
     function dropHandler(e: DragEvent) {
@@ -212,8 +211,8 @@
                 {#if status}{status}{:else}{@html '&nbsp;' }{/if}
             </div>
         </div>
+        {#if !bytecode}
         <div class="display modal">
-            {#if !bytecode}
                 <Panel
                     title="BYTECODE.ZIP"
                     --bg-color={COLORS["--ctrl-bg-color"]}
@@ -229,8 +228,8 @@
                         </ul>
                     </div>
                 </Panel>
-            {/if}
-        </div>
+            </div>
+        {/if}
     </div>
     <div class="crt-effect-1">
         {#each new Array(15) as n}

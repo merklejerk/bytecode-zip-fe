@@ -1,6 +1,6 @@
 <script lang="ts">
     export let title: string = '';
-    export let raised: string | undefined;
+    export let raised: boolean = false;
 </script>
 
 <style lang="scss">
