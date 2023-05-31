@@ -23,7 +23,9 @@
 	"type": "module",
 	"dependencies": {
 		"@picocss/pico": "^1.5.10",
+		"@types/pako": "^2.0.0",
 		"ganache": "^7.8.0",
+		"pako": "^2.1.0",
 		"underscore": "^1.13.6",
 		"viem": "^0.3.37"
 	}

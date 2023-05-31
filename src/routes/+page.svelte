@@ -24,8 +24,23 @@
     $: status = bytecode ? '<ESC> to clear' : 'Waiting for input...';
 
     function pasteHandler(e: ClipboardEvent) {
-        bytecode = e.clipboardData?.getData("text")
-            .replaceAll(/\s+/g, '');
+        setBytecode(e
+            .clipboardData?.getData("text")
+            .replaceAll(/\s+/g, '')
+        );
+    }
+
+    function setBytecode(newBytecode: string) {
+        if (newBytecode.match(/^0x/i)) {
+            newBytecode = newBytecode.slice(2);
+        }
+        if (!newBytecode) {
+            bytecode = undefined;
+        }
+        if (!newBytecode.match(/^([a-f0-9]{2})+$/i)) {
+            throw new Error(`Invalid bytecode: ${newBytecode.slice(0,100)}...`);
+        }
+        bytecode = newBytecode;
     }
 
     function dropHandler(e: DragEvent) {
@@ -149,11 +164,32 @@
             justify-content: space-evenly;
             gap: 1em;
             box-shadow: inset 0 0 min(10vh, 10vw) rgba(27, 2, 10, 0.5);
-            
+
+            > .crt-effect-2 {
+                position: absolute;
+                inset: 0;
+                background-image: linear-gradient(
+                        -160deg,
+                        rgba(#dbaa09, 0) 0%,
+                        rgba(#dbaa09, 0.1) 66%,
+                        rgba(#dbaa09, 0.33) 100%
+                    );
+            }
+            > .crt-effect-3 {
+                // display: none;
+                position: absolute;
+                left: 5vw;
+                top: 1vh;
+                right: 1vw;
+                bottom: 16vh;
+                border-radius: 0 5vmax 0 0;
+                box-shadow: inset min(-11vmin, -5rem) max(12vmin, 6rem) 0 rgba(rgb(137, 216, 135), 0.28);
+                filter: blur(max(75px, min(4vmax, 96px)));
+            }
             > .crt-line {
                 width: 100%;
                 height: 0.15em;
-                box-shadow: 0 0 1em rgba(var(--crt-glow-1), 0.6);
+                box-shadow: 0 0 1em rgba(var(--crt-glow-1), 0.4);
             }
             > .crt-scan-line {
                 animation: scan-line-animation 2s linear 0s infinite;
@@ -232,6 +268,8 @@
         {/if}
     </div>
     <div class="crt-effect-1">
+        <div class="crt-effect-2" />
+        <div class="crt-effect-3" />
         {#each new Array(15) as n}
             <div class="crt-line" />
         {/each}
