@@ -2,10 +2,12 @@
     import { browser } from "$app/environment";
     import { onMount } from "svelte";
     import Panel from "../lib/panel.svelte";
+    import HexEditor from "../lib/hex-editor.svelte";
     
     const COLORS = {
         '--console-text-color1': 'white',
         '--console-text-color2': '#fdfd55',
+        '--console-text-color3': '#9dfaff',
         '--console-bg-color': '#0000aa',
         '--ctrl-fg-color': '#111',
         '--ctrl-bg-color': '#c0c0c0',
@@ -18,6 +20,8 @@
     let bytecode: string | undefined;
     let textInput: HTMLDivElement;
     let status: string | undefined;
+   
+    $: status = bytecode ? '<ESC> to clear' : 'Waiting for input...';
 
     function pasteHandler(e: ClipboardEvent) {
         bytecode = e.clipboardData?.getData("text")
@@ -49,9 +53,6 @@
 <style lang="scss">
     @import "@picocss/pico/scss/pico.scss";
 
-    .hidden {
-        display: none;
-    }
     main {
         height: 100vh;
         padding: 0;
@@ -61,21 +62,6 @@
         font-family: 'Atari';
         color: var(--console-text-color1);
         
-        > .editor {
-            margin: 0;
-            padding: 0;
-            font-size: 2em;
-            caret-color: transparent;
-            border: 0;
-            white-space: break-spaces;
-            word-break: break-all;
-            overflow: hidden;
-            line-height: 1em;
-            max-height: 100%;
-            min-height: 100%;
-            user-select: none;
-
-        }
         .display {
             position: absolute;
             inset: 0;
@@ -100,67 +86,61 @@
         }
         .display.app {
             display: grid;
-            grid-template: 10fr auto 6fr 1.5em / 1fr;
+            grid-template: 10fr 6fr minmax(1.5em, auto) / 1fr;
             grid-template-areas: "editor"
-                                 "separator"
-                                 "side-pane"
+                                 "info-pane"
                                  "status-bar";
             align-items: start;
-            
             @media (min-width: map-get($breakpoints, "lg")) {
-                grid-template: 1fr 1.5em / 10fr auto 4fr;
-                grid-template-areas: "editor separator side-pane"
-                                     "status-bar status-bar status-bar";
+                grid-template: 1fr minmax(1.5em, auto) / 10fr 4fr;
+                grid-template-areas: "editor info-pane"
+                                     "status-bar status-bar";
+                                
+            }
+
+            > * {
+                min-width: 0;
+                min-height: 0;
+                height: 100%;
+                width: 100%;
+                overflow: hidden;
             }
             > .editor {
                 grid-area: editor;
-                > .caret {
-                    display: inline-block;
-                    background-color: var(--console-text-color1);
-                    width: 1.25ex;
-                    height: 1.75ex;
-                    margin-left: 0.25ex;
-                    animation: blink-animation 1s steps(2, start) infinite;
-                }
+                padding: 0 1ex;
             }
-            > .side-pane {
-                grid-area: side-pane;
-            }
-            > .separator {
-                grid-area: separator;
-                height: 100%;
-                width: 100%;
+            > .info-pane {
+                grid-area: info-pane;
+                align-self: center;
+                justify-self: center;
                 display: flex;
                 flex-direction: column;
-                align-items: stretch;
-                justify-content: stretch;
-                margin: 1em 0;
+                align-items: center;
+                justify-content: center;
                 @media (min-width: map-get($breakpoints, "lg")) {
-                    flex-direction: row;
-                    margin: 0 1em;
+                    flex: 0 1 25vh;
+                    align-self: start;
                 }
 
-                > * {
-                    background-color: var(--console-text-color1);
-                    width: auto;
-                    height: 0.25em;
-                    margin: 0 1em;
-                    @media (min-width: map-get($breakpoints, "lg")) {
-                        width: 0.25em;
-                        height: auto;
-                        margin: 1em 0;
-                    }
+                :global(> * > *) {
+                    flex: 1 1 auto;
+                    width: 100%;
+                }
+            
+                .details {
+                    // width: auto;
                 }
             }
             > .status-bar {
                 grid-area: status-bar;
-                padding: 1em;
+                padding: 0.1em;
                 background-color: var(--ctrl-bg-color);
+                color: var(--ctrl-fg-color);
                 text-align: center;
             }
         }
         > .crt-effect-1 {
-            --crt-glow-1: 196, 146, 194;
+            --crt-glow-1: 215, 146, 194;
 
             pointer-events: none;
             position: absolute;
@@ -169,7 +149,7 @@
             flex-direction: column;
             justify-content: space-evenly;
             gap: 1em;
-            box-shadow: inset 0 0 min(10vh,10vw) rgba(27, 2, 10, 0.5);
+            box-shadow: inset 0 0 min(10vh, 10vw) rgba(27, 2, 10, 0.5);
             
             > .crt-line {
                 width: 100%;
@@ -180,7 +160,8 @@
                 animation: scan-line-animation 2s linear 0s infinite;
                 position: absolute;
                 width: 100%;
-                height: 10em;
+                height: 33vh;
+                margin: -33vh 0 0 0;
                 background-image: linear-gradient(
                     rgba(var(--crt-glow-1), 0) 0%,
                     rgba(var(--crt-glow-1), 0.08) 85%,
@@ -193,60 +174,62 @@
     
     @keyframes scan-line-animation {
         from {
-            top: calc(0% - 10em);
+            top: 0;
         }
         to {
-            top: 100%;
+            top: calc(100% + 33vh);
         }
     }
 
-    @keyframes blink-animation {
-        to {
-            visibility: hidden;
-        }
-    }
 </style>
 
 <svelte:document on:paste|preventDefault={pasteHandler} on:keyup={keyHandler} />
-<main style={Object.entries(rootStyles).map(([k,v]) => `${k}:${v}`).join(';')}>
-    <div
-        bind:this={textInput}
-        class="editor"
-        on:scroll|stopPropagation|preventDefault={() => textInput.scrollTop = 0}
-        on:resize={() => textInput.scrollTop = 0}
-        on:drop|stopPropagation|preventDefault={dropHandler}
-        on:dragover|preventDefault|stopPropagation
-    >
-    </div>
+<main
+    style={Object.entries(rootStyles).map(([k,v]) => `${k}:${v}`).join(';')}
+    on:drop|stopPropagation|preventDefault={dropHandler}
+    on:dragover|preventDefault|stopPropagation
+>
     <div class="display">
         <div class="display app">
             <div class="editor">
-                {#if bytecode}
-                    { bytecode }
-                {:else}
-                    <span class="caret" />
-                {/if}
+                <HexEditor
+                    hex={bytecode}
+                    --text-color1={COLORS['--console-text-color1']}
+                    --text-color2={COLORS['--console-text-color2']} />
             </div>
-            <div class="separator"><div /></div>
-            <div class="side-pane">foo</div>
-            <div class="status-bar">{#if status}{status}{:else}{@html '&nbsp;' }{/if}</div>
+            <!-- <div class="separator"><div /></div> -->
+            <div class="info-pane">
+                <Panel
+                title="INFO"
+                    --frame-color={COLORS['--console-text-color1']}
+                    --bg-color={COLORS['--console-bg-color']}>
+                    <div class="details">
+                        Compression....
+                    </div>
+                </Panel>
+            </div>
+            <div class="status-bar">
+                {#if status}{status}{:else}{@html '&nbsp;' }{/if}
+            </div>
         </div>
         <div class="display modal">
-            <Panel title="bytecode.zip" --bg-color={COLORS["--ctrl-bg-color"]}>
-                <div class="hello" class:hidden={!!bytecode}>
-                    To begin you can either:
-                    <br />
-                    <br />
-                    <ul>
-                        <li>Paste initcode (hex)</li>
-                        <li>Paste solc build artifact (JSON)</li>
-                        <li>Drop solc build artifact (JSON)</li>
-                    </ul>
-                </div>
-                <div class="progress" class:hidden={!bytecode}>
-                    Hello, world!
-                </div>
-            </Panel>
+            {#if !bytecode}
+                <Panel
+                    title="BYTECODE.ZIP"
+                    --bg-color={COLORS["--ctrl-bg-color"]}
+                    raised>
+                    <div class="hello">
+                        To begin you can either:
+                        <br />
+                        <br />
+                        <ul>
+                            <li>Paste initcode (hex)</li>
+                            <li>Paste solc build artifact (JSON)</li>
+                            <li>Drop solc build artifact (JSON)</li>
+                        </ul>
+                    </div>
+                </Panel>
+            {/if}
         </div>
     </div>
     <div class="crt-effect-1">

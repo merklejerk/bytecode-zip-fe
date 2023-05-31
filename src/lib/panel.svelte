@@ -1,16 +1,12 @@
 <script lang="ts">
     export let title: string = '';
+    export let raised: string | undefined;
 </script>
 
 <style lang="scss">
-    :root {
-        --default-frame-color: #444;
-    }
     .panel {
-        display: flex;
+        --default-frame-color: #444;
         position: relative;
-        flex-direction: column;
-        justify-content: center;
         background-color: var(--bg-color, inherit);
 
         > .frame {
@@ -43,7 +39,7 @@
 
         > .panel-content {
             background-color: var(--bg-color, inherit);
-            margin: 0.25em calc(16px + 0.5ex) 16px calc(16px + 0.5ex);
+            margin: calc(0.5em + 4px * 2) calc(4px * 4 + 0.5ex) 16px calc(4px * 4 + 0.5ex);
         }
     }
     .panel.raised {
@@ -51,7 +47,7 @@
     }
 </style>
 
-<div class="panel raised">
+<div class="panel" class:raised={raised}>
     <div class="frame">
         <div class="border">
             <div class="border">
