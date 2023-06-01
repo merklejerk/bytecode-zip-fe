@@ -1,0 +1,35 @@
+// SPDX-License-Identifier: UNLICENSED
+// Compiler: {{compiler}}
+// Optimizer runs: {{optimizerRuns}}
+pragma solidity ^0.8.20;
+{{#if structs}}
+{{#each structs}}
+struct {{name}} {
+	{{#each fields}}
+	{{this}};
+	{{/each}}
+}
+{{/each}}
+{{/if}}
+
+/// @dev Zipped version of {{contractName}} using runtime v{{version}}
+contract {{contractName}} {
+	constructor() {
+		bytes memory runtimeCode = hex"{{runtimeCode}}";
+		assembly ("memory-safe") {
+			// Overwrite deployed address.
+			let p := add(runtimeCode, 0x2A)
+			mstore(p, or(and(mload(p), 0xffffffffffffffffffffffff), shl(96, address())))
+			return(add(runtimeCode, 0x20), mload(runtimeCode))
+		}
+	}
+	{{#each functions}}
+
+	function {{name}}({{params}})
+		external{{#if modifiers}} {{modifiers}}{{/if}}
+		{{#if returns}}
+		returns ({{returns}})
+		{{/if}}
+	{}
+	{{/each}}
+}

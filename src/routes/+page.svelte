@@ -5,7 +5,10 @@
     import HexEditor from "../lib/hex-editor.svelte";
     import pako from 'pako';
     import { Buffer } from 'buffer/';
+    import { buildRuntime } from '../lib/runtime';
+    import { PUBLIC_Z_ADDRESSES_JSON } from '$env/static/public';
     
+    const Z_ADDRESSES = JSON.parse(PUBLIC_Z_ADDRESSES_JSON);
     const COLORS = {
         '--console-text-color1': 'white',
         '--console-text-color2': '#fdfd55',
@@ -27,6 +30,8 @@
     let statusTimer: NodeJS.Timer | undefined;
     let abi: Abi | undefined;
     let infoFields: Record<string, string | number> = {};
+    let initCode: Buffer | undefined;
+    let deployedAddress: `0x${string}` | undefined;
     let animateZip: (() => void) | undefined;
 
     $: bytecodeHex = unzippedBytecode?.toString('hex') || undefined;
@@ -66,6 +71,7 @@
 
     function getArtifactBytecode(artifact: any): string {
         const r = artifact.bytecode?.object ||
+            artifact.data.bytecode?.object ||
             artifact.bytecode ||
             artifact.compilerOutput?.bytecode?.object ||
             artifact.creationCode ||
@@ -88,6 +94,7 @@
                 throw new Error(`Invalid bytecode!`);
             }
         }
+        initCode = undefined;
         if (!newBytecode) {
             unzippedBytecode = undefined;
             zippedBytecode = undefined;
@@ -98,6 +105,18 @@
         zippedBytecode = Buffer.from(pako.deflate(unzippedBytecode, { level: 9 }));
         animateZip = createZipAnimation();
     }
+
+    // buildRuntime(
+    //         unzippedBytecode,
+    //         zippedBytecode,
+    //         Z_ADDRESSES[chainId],
+    //         abi ? { abi: abi, name: 'Test' }
+    //         ).then(
+    //         r => {
+    //             initCode = r.initCode;
+    //             // ...
+    //         }
+    //     );
 
     function createZipAnimation() {
         return ((duration: number) => {
@@ -208,7 +227,18 @@
     @import "@picocss/pico/scss/pico.scss";
 
     :global(a) {
+        transition: none !important;
         color: #12b9c5 !important;
+    }
+    :global(a:hover, a:active, a:focus) {
+        transition: none !important;
+        background-color: white !important;
+        // filter: invert(1);
+        animation: none;
+    }
+    .strike {
+        text-decoration: line-through;
+        opacity: 0.5;
     }
 
     main {
@@ -435,7 +465,7 @@
                         {#if zippedBytecode}
                             <div class="actions">
                                 <div>[<a href="" class="blink">Deploy</a>]</div>
-                                <div>[<a href="">Verify</a>]</div>
+                                <div>[{#if abi && deployedAddress}<a href="">Verify</a>{:else}<span class="strike">Verify</span>{/if}]</div>
                             </div>
                         {/if}
                     </div>
