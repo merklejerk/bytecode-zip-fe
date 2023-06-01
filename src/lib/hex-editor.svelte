@@ -11,7 +11,7 @@
     $: {
         const hex_ = hex || '';
         const numBytes = Math.floor(hex_.length / 2);
-        words = new Array<string>(Math.ceil(Math.min(numBytes, 3200) / wordSize));
+        words = new Array<string>(Math.ceil(Math.min(numBytes, 3192) / wordSize));
         for (let i = 0; i < words.length; ++i) {
             const o = i * wordSize * 2;
             words[i] = hex_.slice(o, o + wordSize * 2);
@@ -90,14 +90,7 @@
                 width: 1.25ex;
                 height: 1.75ex;
                 margin-top: 0.15em;
-                animation: blink-animation 1s steps(2, start) infinite;
             }
-        }
-    }
-    
-    @keyframes blink-animation {
-        to {
-            visibility: hidden;
         }
     }
 </style>
@@ -116,7 +109,7 @@
         </div>
     {:else}
         <div class="empty">
-            <span class="caret" />
+            <span class="caret blink" />
         </div>
     {/if}
 </div>

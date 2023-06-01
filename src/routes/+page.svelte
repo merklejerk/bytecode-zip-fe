@@ -3,6 +3,8 @@
     import { onMount } from "svelte";
     import Panel from "../lib/panel.svelte";
     import HexEditor from "../lib/hex-editor.svelte";
+    import pako from 'pako';
+    import { Buffer } from 'buffer/';
     
     const COLORS = {
         '--console-text-color1': 'white',
@@ -17,12 +19,36 @@
         ...COLORS,
         height: '100vh',
     };
-    let bytecode: string | undefined;
+    let bytecodeHex: string | undefined;
+    let unzippedBytecode: Buffer | undefined;
+    let zippedBytecode: Buffer | undefined;
     let textInput: HTMLDivElement;
     let status: string | undefined;
     let statusTimer: NodeJS.Timer | undefined;
     let abi: Abi | undefined;
-   
+    let infoFields: Record<string, string | number> = {};
+    let animateZip: (() => void) | undefined;
+
+    $: bytecodeHex = unzippedBytecode?.toString('hex') || undefined;
+
+    $: {
+        infoFields = {};
+        if (unzippedBytecode) {
+            infoFields['Input type'] = abi ? 'artifact' : 'initcode';
+            infoFields['Original size'] = `${
+                (unzippedBytecode.length / 1e3).toFixed(1)
+            }KB`;
+            if (zippedBytecode) {
+                infoFields['Zipped size'] = `${
+                    (zippedBytecode.length / 1e3).toFixed(1)
+                }KB`;
+                infoFields['Compression'] = `${
+                    ((1 - zippedBytecode.length / unzippedBytecode.length) * 100)
+                        .toFixed('1')
+                }%`;
+            }
+        }   
+    }
 
     function setArtifactJSON(json: string) {
         let artifact;
@@ -50,20 +76,65 @@
         return r;
     }
 
-    function setBytecode(newBytecode: string) {
-        if (typeof(newBytecode) !== 'string') {
-            throw new Error(`Invalid bytecode!`);
-        }
-        if (newBytecode.match(/^0x/i)) {
-            newBytecode = newBytecode.slice(2);
+    function setBytecode(newBytecode: string | undefined) {
+        if (newBytecode !== undefined) {
+            if (typeof(newBytecode) !== 'string') {
+                throw new Error(`Invalid bytecode!`);
+            }
+            if (newBytecode.match(/^0x/i)) {
+                newBytecode = newBytecode.slice(2);
+            }
+            if (!newBytecode.match(/^([a-f0-9]{2})+$/i)) {
+                throw new Error(`Invalid bytecode!`);
+            }
         }
         if (!newBytecode) {
-            bytecode = undefined;
+            unzippedBytecode = undefined;
+            zippedBytecode = undefined;
+            animateZip = undefined;
+            return;
         }
-        if (!newBytecode.match(/^([a-f0-9]{2})+$/i)) {
-            throw new Error(`Invalid bytecode!`);
-        }
-        bytecode = newBytecode;
+        unzippedBytecode = Buffer.from(newBytecode, 'hex');
+        zippedBytecode = Buffer.from(pako.deflate(unzippedBytecode, { level: 9 }));
+        animateZip = createZipAnimation();
+    }
+
+    function createZipAnimation() {
+        return ((duration: number) => {
+            let startTime = Date.now();
+            let tweened = Buffer.alloc(Math.min(
+                3192,
+                Math.max(
+                    unzippedBytecode!.length,
+                    zippedBytecode!.length
+                ),
+            ));
+            let tweenedLength = tweened.length;
+            return () => {
+                if (!unzippedBytecode || !zippedBytecode) {
+                    return false;
+                }
+                const f = (Date.now() - startTime) / duration;
+                if (f >= 1) {
+                    tweened = zippedBytecode!;
+                    tweenedLength = zippedBytecode.length;
+                } else {
+                    for (let i = 0; i < tweened.length; ++i) {
+                        const v1 = zippedBytecode[i];
+                        const v2 = unzippedBytecode[i];
+                        tweened[i] = Math.floor(
+                            f * (v1 || 0) + (1 - f) * (v2 || 0)
+                            );
+                        tweenedLength = Math.floor(
+                            f * zippedBytecode.length +
+                                (1 - f) * unzippedBytecode.length
+                        );
+                    }
+                }
+                bytecodeHex = tweened.slice(0, tweenedLength).toString('hex');
+                return f < 1;
+            };
+        })(1e3);
     }
 
     function setStatus(newStatus: string | undefined) {
@@ -113,21 +184,32 @@
         if (e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();
-            bytecode = undefined;
+            setBytecode(undefined);
         }
     }
 
     onMount(() => {
         const resizeHandler = () => {
-
             rootStyles.height = `${window.innerHeight + 0.5}px`;
         };
         window.addEventListener('resize', resizeHandler);
         resizeHandler();
+
+        setInterval(() => {
+            if (animateZip) {
+                if (!animateZip()) {
+                    animateZip = undefined;
+                }
+            }
+        }, 75);
     });
 </script>
 <style lang="scss">
     @import "@picocss/pico/scss/pico.scss";
+
+    :global(a) {
+        color: #12b9c5 !important;
+    }
 
     main {
         height: 100vh;
@@ -162,7 +244,7 @@
         }
         .display.app {
             display: grid;
-            grid-template: 10fr 6fr minmax(1.5em, auto) / 1fr;
+            grid-template: 1fr auto minmax(1.5em, auto) / 1fr;
             grid-template-areas: "editor"
                                  "info-pane"
                                  "status-bar";
@@ -203,16 +285,55 @@
                     width: 100%;
                 }
             
-                .details {
-                    // width: auto;
+                .info-content {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 2em;
+                    height: 100%;
+                    justify-content: center;
+                    
+                    .fields > .field {  
+                        overflow: hidden;
+                        > .label {
+                            // float: left;
+                            white-space: nowrap;
+                            float: left;
+                        }
+    
+                        > .label::after {
+                            content: "..................................................................................................................";
+                        }
+    
+                        > .value {
+                            white-space: nowrap;
+                            float: right;
+                            color: var(--console-text-color2);
+                        }
+    
+                        > .value::before {
+                            content: "..................................................................................................................";
+                            color: var(--console-text-color1);
+                        }
+                    }
+    
+                    > .actions {
+                        display: flex;
+                        justify-content: center;
+                        gap: 0 2ex;
+                        flex-wrap: wrap;
+                    }
                 }
             }
             > .status-bar {
+                position: relative;
+                z-index: 1;
                 grid-area: status-bar;
                 padding: 0.1em;
                 background-color: var(--ctrl-bg-color);
                 color: var(--ctrl-fg-color);
                 text-align: center;
+                display: flex;
+                justify-content: space-between;
             }
         }
         > .crt-effect-1 {
@@ -220,6 +341,7 @@
 
             pointer-events: none;
             position: absolute;
+            z-index: 2;
             inset: 0;
             display: flex;
             flex-direction: column;
@@ -233,20 +355,20 @@
                 background-image: linear-gradient(
                         -160deg,
                         rgba(#dbaa09, 0) 0%,
-                        rgba(#dbaa09, 0.175) 66%,
-                        rgba(#dbaa09, 0.33) 100%
+                        rgba(#dbaa09, 0.185) 66%,
+                        rgba(#dbaa09, 0.28) 100%
                     );
                 mix-blend-mode: hard-light;
             }
             > .crt-effect-3 {
                 position: absolute;
-                left: 5vw;
-                top: 1vh;
-                right: 1vw;
-                bottom: 16vh;
+                top: 2rem;
+                right: 2rem;
+                left: max(66vw, calc(100vw - 32rem));
+                bottom: 2rem;
                 border-radius: 0 5vmax 0 0;
-                box-shadow: inset min(-11vmin, -5rem) max(12vmin, 6rem) 0 rgba(rgb(137, 216, 135), 0.25);
-                filter: blur(max(75px, min(4vmax, 96px)));
+                box-shadow: inset -1.5rem 1.5rem 0 rgba(rgb(137, 216, 135), 0.3);
+                filter: blur(48px);
             }
             > .crt-line {
                 width: 100%;
@@ -290,35 +412,57 @@
         <div class="display app">
             <div class="editor">
                 <HexEditor
-                    hex={bytecode}
+                    hex={bytecodeHex}
                     --text-color1={COLORS['--console-text-color1']}
                     --text-color2={COLORS['--console-text-color2']} />
             </div>
-            <!-- <div class="separator"><div /></div> -->
             <div class="info-pane">
                 <Panel
                 title="INFO"
                     --frame-color={COLORS['--console-text-color1']}
                     --bg-color={COLORS['--console-bg-color']}>
-                    <div class="details">
-                        Compression....
+                    <div class="info-content">
+                        {#if Object.entries(infoFields).length}
+                            <div class="fields">
+                                {#each Object.entries(infoFields) as [label, value]}
+                                    <div class="field">
+                                        <div class="label">{label}</div>
+                                        <div class="value">{value}</div>
+                                    </div>
+                                {/each}
+                            </div>
+                        {/if}
+                        {#if zippedBytecode}
+                            <div class="actions">
+                                <div>[<a href="" class="blink">Deploy</a>]</div>
+                                <div>[<a href="">Verify</a>]</div>
+                            </div>
+                        {/if}
                     </div>
                 </Panel>
             </div>
             <div class="status-bar">
-                {(() => {
-                    if (status) {
-                        return status;
-                    }
-                    if (bytecode) {
-                        return '<ESC> to clear';
-                    }
-                    return 'Waiting for input...';
-                })()}
+                <div class="left-links">
+                    [<a href="https://github.com/merklejerk/zipped-contracts">Github</a>]
+                </div>
+                <div class="message">
+                    {(() => {
+                        if (status) {
+                            return status;
+                        }
+                        if (unzippedBytecode) {
+                            return '<ESC> to clear';
+                        }
+                        return 'Waiting for input...';
+                    })()}
+                </div>
+                <div class="right-links">
+                    [<a href="https://github.com/merklejerk/bytecode-zip-fe/docs/HELP.md">Help</a>]
+                </div>
             </div>
         </div>
-        {#if !bytecode}
-        <div class="display modal">
+        {#if !unzippedBytecode}
+            <div class="display modal">
                 <Panel
                     title="BYTECODE.ZIP"
                     --bg-color={COLORS["--ctrl-bg-color"]}

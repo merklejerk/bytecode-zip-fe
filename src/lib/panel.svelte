@@ -8,8 +8,11 @@
         --default-frame-color: #444;
         position: relative;
         background-color: var(--bg-color, inherit);
+        display: flex;
+        flex-direction: column;
 
         > .frame {
+            flex: 0 0 auto;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -38,8 +41,10 @@
         }
 
         > .panel-content {
+            flex: 1 1 100%;
             background-color: var(--bg-color, inherit);
-            margin: calc(0.5em + 4px * 2) calc(4px * 4 + 0.5ex) 16px calc(4px * 4 + 0.5ex);
+            padding: 1ex;
+            margin: calc(0) calc((4px + 3px) * 2) calc((4px + 3px) * 2) calc((4px + 3px) * 2);
         }
     }
     .panel.raised {

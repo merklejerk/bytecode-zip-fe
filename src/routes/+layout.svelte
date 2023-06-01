@@ -20,6 +20,18 @@ import "@picocss/pico";
         font-family: 'Atari';
         src: url('/Atari.ttf') format('truetype');
     }
+    @keyframes blink-animation {
+        50% {
+            opacity: 0;
+        }
+        100% {
+            opacity: 1;
+        }
+    }
+
+    :global(.blink) {
+        animation: blink-animation 1s steps(1, start) infinite;
+    }
 </style>
 
 <slot />
