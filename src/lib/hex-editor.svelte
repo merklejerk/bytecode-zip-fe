@@ -69,6 +69,9 @@
             flex: 0;
             color: var(--text-color2, white);
             text-transform: uppercase;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25em 0;
         }
 
         > .words {
@@ -76,7 +79,7 @@
             display: flex;
             flex-direction: row;
             flex-wrap: wrap;
-            gap: 0 3ex;
+            gap: 0.25em 3ex;
             align-items: start;
             justify-content: start;
             color: var(--text-color1);

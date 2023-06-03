@@ -4,6 +4,8 @@
 </script>
 
 <style lang="scss">
+    @import "$lib/common.scss";
+
     .panel {
         --default-frame-color: #444;
         position: relative;

@@ -1,0 +1,45 @@
+// Breakpoints
+// 'null' disable the breakpoint
+$breakpoints: (
+  xs: 0,
+  sm: 576px,
+  md: 768px,
+  lg: 992px,
+  xl: 1200px,
+) !default;
+
+// Viewports
+$viewports: (
+  // 'null' disable the viewport on a breakpoint
+  sm: 510px,
+  md: 700px,
+  lg: 920px,
+  xl: 1130px
+) !default;
+
+@keyframes blink-animation {
+    50% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+.blink {
+    animation: blink-animation 1s steps(1, start) infinite;
+}
+
+@keyframes blink-color-animation {
+    50% {
+        color: rgba(white, 0);
+    }
+    100% {
+        color: auto;
+    }
+}
+
+.blink-color {
+    animation: blink-color-animation 1s steps(1, start) infinite;
+}
+

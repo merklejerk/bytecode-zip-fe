@@ -5,9 +5,17 @@
     import HexEditor from "../lib/hex-editor.svelte";
     import pako from 'pako';
     import { Buffer } from 'buffer/';
-    import { buildRuntime } from '../lib/runtime';
+    import { buildSelfExtracting } from '../lib/runtime';
     import { PUBLIC_Z_ADDRESSES_JSON } from '$env/static/public';
     
+    enum DeployStep {
+        None,
+        Deploy,
+        Wrap,
+        Verify,
+        Verified,
+    }
+
     const Z_ADDRESSES = JSON.parse(PUBLIC_Z_ADDRESSES_JSON);
     const COLORS = {
         '--console-text-color1': 'white',
@@ -24,15 +32,18 @@
     };
     let bytecodeHex: string | undefined;
     let unzippedBytecode: Buffer | undefined;
-    let zippedBytecode: Buffer | undefined;
-    let textInput: HTMLDivElement;
+    let selfExtractingBytecode: Buffer | undefined;
     let status: string | undefined;
     let statusTimer: NodeJS.Timer | undefined;
     let abi: Abi | undefined;
     let infoFields: Record<string, string | number> = {};
-    let initCode: Buffer | undefined;
     let deployedAddress: `0x${string}` | undefined;
-    let animateZip: (() => void) | undefined;
+    let deployedWrapperAddress: `0x${string}` | undefined;
+    let chainId: number | undefined;
+    let deployStep = DeployStep.None;
+    let wallet: any | undefined;
+    let zAddress: `0x${string}` | undefined;
+    let animateZip: (() => boolean) | undefined;
 
     $: bytecodeHex = unzippedBytecode?.toString('hex') || undefined;
 
@@ -43,16 +54,24 @@
             infoFields['Original size'] = `${
                 (unzippedBytecode.length / 1e3).toFixed(1)
             }KB`;
-            if (zippedBytecode) {
+            if (selfExtractingBytecode) {
                 infoFields['Zipped size'] = `${
-                    (zippedBytecode.length / 1e3).toFixed(1)
+                    (selfExtractingBytecode.length / 1e3).toFixed(1)
                 }KB`;
                 infoFields['Compression'] = `${
-                    ((1 - zippedBytecode.length / unzippedBytecode.length) * 100)
-                        .toFixed('1')
+                    ((1 - selfExtractingBytecode.length / unzippedBytecode.length) * 100)
+                        .toFixed(1)
                 }%`;
             }
         }   
+    }
+
+    $: {
+        if (selfExtractingBytecode) {
+            animateZip = createZipAnimation();
+        } else {
+            animateZip = undefined;
+        }
     }
 
     function setArtifactJSON(json: string) {
@@ -94,29 +113,22 @@
                 throw new Error(`Invalid bytecode!`);
             }
         }
-        initCode = undefined;
+        deployStep = DeployStep.None;
+        selfExtractingBytecode = undefined;
         if (!newBytecode) {
             unzippedBytecode = undefined;
-            zippedBytecode = undefined;
+            selfExtractingBytecode = undefined;
             animateZip = undefined;
             return;
         }
         unzippedBytecode = Buffer.from(newBytecode, 'hex');
-        zippedBytecode = Buffer.from(pako.deflate(unzippedBytecode, { level: 9 }));
-        animateZip = createZipAnimation();
+        const zippedBytecode = Buffer.from(pako.deflate(unzippedBytecode, { level: 9 }));
+        selfExtractingBytecode = buildSelfExtracting(
+            unzippedBytecode,
+            zippedBytecode,
+            Z_ADDRESSES['1'],
+        );
     }
-
-    // buildRuntime(
-    //         unzippedBytecode,
-    //         zippedBytecode,
-    //         Z_ADDRESSES[chainId],
-    //         abi ? { abi: abi, name: 'Test' }
-    //         ).then(
-    //         r => {
-    //             initCode = r.initCode;
-    //             // ...
-    //         }
-    //     );
 
     function createZipAnimation() {
         return ((duration: number) => {
@@ -125,27 +137,27 @@
                 3192,
                 Math.max(
                     unzippedBytecode!.length,
-                    zippedBytecode!.length
+                    selfExtractingBytecode!.length
                 ),
             ));
             let tweenedLength = tweened.length;
             return () => {
-                if (!unzippedBytecode || !zippedBytecode) {
+                if (!unzippedBytecode || !selfExtractingBytecode) {
                     return false;
                 }
                 const f = (Date.now() - startTime) / duration;
                 if (f >= 1) {
-                    tweened = zippedBytecode!;
-                    tweenedLength = zippedBytecode.length;
+                    tweened = selfExtractingBytecode!;
+                    tweenedLength = selfExtractingBytecode.length;
                 } else {
                     for (let i = 0; i < tweened.length; ++i) {
-                        const v1 = zippedBytecode[i];
+                        const v1 = selfExtractingBytecode[i];
                         const v2 = unzippedBytecode[i];
                         tweened[i] = Math.floor(
                             f * (v1 || 0) + (1 - f) * (v2 || 0)
                             );
                         tweenedLength = Math.floor(
-                            f * zippedBytecode.length +
+                            f * selfExtractingBytecode.length +
                                 (1 - f) * unzippedBytecode.length
                         );
                     }
@@ -171,7 +183,7 @@
         const raw = e.clipboardData?.getData('text');
         try {
             if (!(raw?.match(/^(0x)?([a-f0-9]{2})+$/i))) {
-                setArtifactJSON(raw);
+                setArtifactJSON(raw!);
             } else {
                 abi = undefined;
                 setBytecode(raw);
@@ -203,8 +215,16 @@
         if (e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();
-            setBytecode(undefined);
+            reset();
         }
+    }
+
+    function reset() {
+        setBytecode(undefined);
+    }
+
+    function connectWallet() {
+        // ...
     }
 
     onMount(() => {
@@ -224,24 +244,16 @@
     });
 </script>
 <style lang="scss">
-    @import "@picocss/pico/scss/pico.scss";
+    @import "$lib/common.scss";
 
-    :global(a) {
-        transition: none !important;
-        color: #12b9c5 !important;
-    }
-    :global(a:hover, a:active, a:focus) {
-        transition: none !important;
-        background-color: white !important;
-        // filter: invert(1);
-        animation: none;
-    }
-    .strike {
-        text-decoration: line-through;
-        opacity: 0.5;
+    input[type=text] {
+        background-color: white;
+        border-radius: 0;
+        box-shadow: inset 0.22em 0.22em 0 var(--ctrl-fg-color);
     }
 
     main {
+        width: 100%;
         height: 100vh;
         padding: 0;
         margin: 0;
@@ -259,12 +271,28 @@
             align-items: center;
         }
         .display.modal {
-            .hello {
+            .modal-content {
                 text-align: start;
                 align-self: center;
                 color: var(--ctrl-fg-color);
-                * {
-                    color: inherit;
+            }
+            .modal-content.connect-wallet {
+                > *:not(:last-child) {
+                    margin-bottom: 0.75em;
+                }
+                > form {
+                    > *:not(:last-child) {
+                        margin-bottom: 0.75em;
+                    }
+                    > .options {
+                        display: flex;
+                        flex-direction: column;
+                        flex-wrap: wrap;
+                    }
+                    > .submit {
+                        text-align: center;
+                        white-space: nowrap;
+                    }
                 }
             }
             .progress {
@@ -321,15 +349,17 @@
                     gap: 2em;
                     height: 100%;
                     justify-content: center;
+                    overflow: hidden;
                     
                     .fields > .field {  
-                        overflow: hidden;
+
+                        > * {
+                            margin-bottom: 0.25em;
+                        }
                         > .label {
-                            // float: left;
                             white-space: nowrap;
                             float: left;
                         }
-    
                         > .label::after {
                             content: "..................................................................................................................";
                         }
@@ -339,7 +369,6 @@
                             float: right;
                             color: var(--console-text-color2);
                         }
-    
                         > .value::before {
                             content: "..................................................................................................................";
                             color: var(--console-text-color1);
@@ -351,6 +380,20 @@
                         justify-content: center;
                         gap: 0 2ex;
                         flex-wrap: wrap;
+
+                        > * {
+                            white-space: nowrap;
+                        }
+                        a.current {
+                            @extend .blink;
+                        }
+                        a.unavailable {
+                            text-decoration: line-through;
+                        }
+                        a.completed::before {
+                            content: "☑";
+                            opacity: 0.5;
+                        }
                     }
                 }
             }
@@ -462,10 +505,49 @@
                                 {/each}
                             </div>
                         {/if}
-                        {#if zippedBytecode}
+                        {#if selfExtractingBytecode}
                             <div class="actions">
-                                <div>[<a href="" class="blink">Deploy</a>]</div>
-                                <div>[{#if abi && deployedAddress}<a href="">Verify</a>{:else}<span class="strike">Verify</span>{/if}]</div>
+                                <div>[<a
+                                    class:current={!deployedAddress}
+                                    class:completed={!!deployedAddress}
+                                    on:click|preventDefault={
+                                        deployedAddress
+                                        ? undefined
+                                        : () => deployStep = DeployStep.Deploy
+                                    }
+                                    href={
+                                        deployedAddress
+                                        ? undefined
+                                        : ""
+                                    }>Deploy</a>]</div>
+                                <div>[<a
+                                    class:current={deployedAddress && !deployedWrapperAddress}
+                                    class:completed={!!deployedWrapperAddress}
+                                    class:unavailable={!abi}
+                                    on:click|preventDefault={
+                                        !abi
+                                        ? undefined
+                                        : () => deployStep = DeployStep.Wrap
+                                    }
+                                    href={
+                                        !abi
+                                        ? undefined
+                                        : ""
+                                    }>Deploy Wrapper</a>]</div>
+                                <div>[<a
+                                    class:current={deployedWrapperAddress}
+                                    class:completed={deployStep == DeployStep.Verified}
+                                    class:unavailable={!abi}
+                                    on:click|preventDefault={
+                                        !abi
+                                        ? undefined
+                                        : () => deployStep = DeployStep.Verify
+                                    }
+                                    href={
+                                        !abi
+                                        ? undefined
+                                        : ""
+                                    }>Verify Wrapper</a>]</div>
                             </div>
                         {/if}
                     </div>
@@ -497,15 +579,71 @@
                     title="BYTECODE.ZIP"
                     --bg-color={COLORS["--ctrl-bg-color"]}
                     raised>
-                    <div class="hello">
-                        To begin you can either:
-                        <br />
-                        <br />
+                    <div class="modal-content">
+                        <div>To begin you can either:</div>
                         <ul>
                             <li>Paste initcode (hex)</li>
                             <li>Paste solc build artifact (JSON)</li>
                             <li>Drop solc build artifact (JSON)</li>
                         </ul>
+                    </div>
+                </Panel>
+            </div>
+        {:else if deployStep != DeployStep.None && (!zAddress || !wallet)}
+            <div class="display modal">
+                <Panel
+                    title="Deploy"
+                    --bg-color={COLORS["--ctrl-bg-color"]}
+                    raised>
+                    <div class="modal-content connect-wallet">
+                        <div class="title">Connect your wallet to continue:</div>
+                        <form id="connect-wallet" on:change={() => console.log('eeee')}>
+                            <div class="options">
+                                <label><input type="radio" name="wallet-type" value="metamsk" checked /> Metamask</label>
+                                <label><input type="radio" name="wallet-type" value="rainbow" /> Rainbow</label>
+                                <label><input type="radio" name="wallet-type" value="wc" /> WalletConnect</label>
+                            </div>
+                            <div class="submit">
+                                [<a href={wallet ? undefined : ""}>{wallet ? 'Already connected' : 'Connect' }</a>]
+                            </div>
+                        </form>
+                        {#if wallet && !zAddress}
+                            <div class="chain-error">Zipped contracts are not supported on this network. Switch to another</div>
+                        {/if}
+                    </div>
+                </Panel>
+            </div>
+        {:else if deployStep == DeployStep.Deploy}
+            <div class="display modal">
+                <Panel
+                    title="Deploy"
+                    --bg-color={COLORS["--ctrl-bg-color"]}
+                    raised>
+                    <div class="modal-content deploy">
+                        {#if chainId}
+                        <div>
+                            Connected to chain: {chainId}
+                        </div>
+                        {:else}
+                        <div>
+                            <a on:click|preventDefault|stopPropagation={connectWallet}>Connect wallet</a>
+                        </div>
+                        {/if}
+                        Contract Name:
+                        <input type="text" value="" placeholder="ContractName" />
+                    </div>
+                </Panel>
+            </div>
+        {:else if deployStep == DeployStep.Wrap}
+            <div class="display modal">
+                <Panel
+                    title="Deploy"
+                    --bg-color={COLORS["--ctrl-bg-color"]}
+                    raised>
+                    <div class="modal-content wrap">
+                        <div>Name your contract.</div>
+                        Contract Name:
+                        <input type="text" value="" placeholder="ContractName" />
                     </div>
                 </Panel>
             </div>

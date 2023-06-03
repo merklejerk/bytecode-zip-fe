@@ -5,7 +5,7 @@ import {
     type CompilerInput,
 } from './worker-compiler';
 import Handlebars from 'handlebars';
-import codeTemplate from './sol/Template.sol.handlebars?raw';
+import codeTemplate from './sol/Wrapper.sol.handlebars?raw';
 import { numberToBytes, hexToBytes, keccak256 } from 'viem';
 import { COMPILER_VERSION  } from './worker-compiler';
 import { PUBLIC_Z_VERSION } from '$env/static/public';
@@ -19,11 +19,6 @@ interface RuntimeResult {
     }
 }
 
-interface SourceDetails {
-    name: string;
-    abi: Abi;
-}
-
 interface FunctionTemplate {
     name: string;
     modifiers?: string;
@@ -33,24 +28,40 @@ interface FunctionTemplate {
 
 const OPTIMIZER_RUNS = 200;
 
-export async function buildRuntime(
+export function buildSelfExtracting(
     unzippedInitCode: Buffer,
     zippedInitCode: Buffer,
     zAddress: `0x${string}`,
-    details?: SourceDetails,
-    ): Promise<RuntimeResult>
+    ): Buffer
 {
     const runtimeCode = createSelfExtractingRuntime(
         unzippedInitCode,
         zippedInitCode,
         zAddress
     );
-    if (!details) {
-        return { initCode: createRawDeployerInitCode(runtimeCode) };
-    }
-    const code = createVerifiableCode(runtimeCode, details);
+    return createRawDeployerInitCode(runtimeCode);
+}
+
+export async function buildVerifiableForwarder(
+    zippedAddress: `0x${string}`,
+    contractName: string,
+    abi: Abi,
+    ): Promise<RuntimeResult>
+{
+    const code = Handlebars.compile(codeTemplate)({
+        version: PUBLIC_Z_VERSION,
+        contractName,
+        compiler: COMPILER_VERSION,
+        optimizerRuns: OPTIMIZER_RUNS,
+        zippedAddress,
+        zippedAddressHex: zippedAddress.slice(2).toLowerCase(),
+        functions:
+            (abi.filter(e => e.type === 'function') as AbiFunction[])
+            .map(createFunctionTemplateFromAbi),
+        structs: Object.values(createStructs(abi)),
+    });
     const solcOutput = await compile(createSolcInput({
-        [`Zipped.sol`]: code,
+        [`wrapper`]: code,
     }));
 
     if (solcOutput.errors) {
@@ -63,7 +74,7 @@ export async function buildRuntime(
     }
     return {
         initCode: Buffer.from(
-            solcOutput.contracts[`Zipped.sol`][details.name]
+            solcOutput.contracts[`wrapper`][contractName]
                 .evm.bytecode.object.slice(2)
         ),
         source: {
@@ -90,19 +101,6 @@ function createSolcInput(files: { [file: string]: string }): CompilerInput {
     };
 }
 
-function createVerifiableCode(runtimeCode: Buffer, details: SourceDetails): string {
-    return Handlebars.compile(codeTemplate)({
-        version: PUBLIC_Z_VERSION,
-        runtimeCode: runtimeCode.toString('hex'),
-        contractName: details.name,
-        compiler: COMPILER_VERSION,
-        optimizerRuns: OPTIMIZER_RUNS,
-        functions:
-            (details.abi.filter(e => e.type === 'function') as AbiFunction[])
-            .map(createFunctionTemplateFromAbi),
-        structs: Object.values(createStructs(details.abi)),
-    });
-}
 function createSelfExtractingRuntime(
     unzippedInitCode: Buffer,
     zippedInitCode: Buffer,
@@ -185,7 +183,7 @@ function encodeParameter(p: AbiParameter, isField: boolean = false): string {
         p.type === 'bytes' ||
         p.type === 'string' ||
         p.type.match(/\[\d?]$/);
-    return `${encodeTypeName(p)}${!isField && isMemory ? ' memory' : ''} ${p.name}`;
+    return `${encodeTypeName(p)}${!isField && isMemory ? ' calldata' : ''} ${p.name}`;
 }
 
 function encodeTypeName(p: AbiParameter): string {

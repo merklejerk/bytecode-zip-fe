@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: UNLICENSED
+// Compiler: {{compiler}}
+// Optimizer runs: {{optimizerRuns}}
+pragma solidity ^0.8.20;
+{{#if structs}}
+{{#each structs}}
+struct {{name}} {
+	{{#each fields}}
+	{{this}};
+	{{/each}}
+}
+{{/each}}
+{{/if}}
+
+/// @dev Wrapper for zipped contract {{contractName}} ({{zippedAddress}}).
+contract {{contractName}} {
+	bytes32 immutable __forwarderCode1;
+	bytes12 immutable __forwarderCode2;
+
+	constructor() {
+		/*	
+			PUSH0
+			PUSH0
+			CALLDATASIZE
+			PUSH0
+			PUSH20 0x000000000000000000000000000000000000
+			GAS
+			CALLDATASIZE
+			PUSH0
+			PUSH0
+			CALLDATACOPY
+			DELEGATECALL
+			PUSH0
+			RETURNDATASIZE
+			SWAP2
+			PUSH1 0x2A
+			RETURNDATASIZE
+			PUSH0	
+			PUSH0
+			RETURNDATACOPY
+			JUMPI
+			REVERT
+			JUMPDEST
+			RETURN
+		*/
+		__forwarderCode1 = hex"5f5f365f73{{zippedAddressHex}}5a365f5f37f45f";
+		__forwarderCode2 = hex"3d91602a3d5f5f3e57fd5bf3";
+	}
+	{{#each functions}}
+
+	function {{name}}({{params}})
+		external{{#if modifiers}} {{modifiers}}{{/if}}
+		{{#if returns}}
+		returns ({{returns}})
+		{{/if}}
+	{ __ftz__(); }
+	{{/each}}
+
+	function __ftz__() private {
+		(function () view) fwd;
+		assembly ("memory-safe") { fwd := sub(codesize(), 32) }
+		fwd();
+	}
+}
