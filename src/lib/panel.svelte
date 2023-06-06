@@ -4,14 +4,19 @@
 </script>
 
 <style lang="scss">
-    @import "$lib/common.scss";
+    :root {
+        --frame-color: #444;
+        --bg-color: inherit;
+        --fg-color: inherit;
+    }
 
     .panel {
-        --default-frame-color: #444;
         position: relative;
-        background-color: var(--bg-color, inherit);
+        background-color: var(--bg-color);
+        color: var(--fg-color);
         display: flex;
         flex-direction: column;
+        line-height: 1.33em;
 
         > .frame {
             flex: 0 0 auto;
@@ -25,12 +30,12 @@
                 position: absolute;
                 inset: 0;
                 margin: 0.5em 4px 4px 4px;
-                border: 3px solid var(--frame-color, var(--default-frame-color));
+                border: 3px solid var(--frame-color);
                 > .border {
                     position: absolute;
                     inset: 0;
                     margin: 4px;
-                    border: 3px solid var(--frame-color, var(--default-frame-color));
+                    border: 3px solid var(--frame-color);
                 }
             }
             > .title {
@@ -38,13 +43,13 @@
                 background-color: inherit;
                 padding: 0 0.15ex;
                 vertical-align: top;
-                color: var(--frame-color, var(--default-frame-color));
+                color: var(--frame-color);
             }
         }
 
         > .panel-content {
             flex: 1 1 100%;
-            background-color: var(--bg-color, inherit);
+            background-color: var(--bg-color);
             padding: 1ex;
             margin: calc(0) calc((4px + 3px) * 2) calc((4px + 3px) * 2) calc((4px + 3px) * 2);
         }

@@ -15,7 +15,7 @@ export interface CompilerInput {
     settings: {
         optimizer: {
             enabled: boolean;
-            runs: number;
+            runs?: number;
         };
         viaIR?: boolean;
         outputSelection: {

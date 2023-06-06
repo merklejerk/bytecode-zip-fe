@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { Abi } from 'viem';
+    import type { Abi, Address } from 'viem';
     import { onMount } from "svelte";
     import Panel from "../lib/panel.svelte";
     import HexEditor from "../lib/hex-editor.svelte";
@@ -7,6 +7,11 @@
     import { Buffer } from 'buffer/';
     import { buildSelfExtracting } from '../lib/runtime';
     import { PUBLIC_Z_ADDRESSES_JSON } from '$env/static/public';
+    import ConnectWalletContent, { wallet } from '$lib/connect-wallet-content.svelte';
+    import DeployZippedContent from '$lib/deploy-zipped-content.svelte';
+    import { EXPLORERS, NETWORK_NAMES } from '$lib/constants';
+    import DeployWrapperContent from '$lib/deploy-wrapper-content.svelte';
+    import InfoContent from '$lib/info-content.svelte';
     
     enum DeployStep {
         None,
@@ -32,45 +37,35 @@
     };
     let bytecodeHex: string | undefined;
     let unzippedBytecode: Buffer | undefined;
-    let selfExtractingBytecode: Buffer | undefined;
+    let selfExtractingZipInitCode: Buffer | undefined;
     let status: string | undefined;
     let statusTimer: NodeJS.Timer | undefined;
     let abi: Abi | undefined;
-    let infoFields: Record<string, string | number> = {};
-    let deployedAddress: `0x${string}` | undefined;
-    let deployedWrapperAddress: `0x${string}` | undefined;
-    let chainId: number | undefined;
     let deployStep = DeployStep.None;
-    let wallet: any | undefined;
-    let zAddress: `0x${string}` | undefined;
+    let zAddress: Address | undefined;
+    let lastDeployedSelfExtractingZipAddress: Address | undefined;
+    let lastDeployedWrapperAddress: Address | undefined;
     let animateZip: (() => boolean) | undefined;
+    // Break some reactivity with an object cache.
+    let CACHE = {
+        deploymentChainId: undefined as number | undefined,
+        selfExtractingZipAddress: undefined as Address | undefined,
+        selfExtractingZipAddressExplorerUrl: undefined as string | undefined,
+        wrapperAddress: undefined as Address | undefined,
+    };
 
     $: bytecodeHex = unzippedBytecode?.toString('hex') || undefined;
-
-    $: {
-        infoFields = {};
-        if (unzippedBytecode) {
-            infoFields['Input type'] = abi ? 'artifact' : 'initcode';
-            infoFields['Original size'] = `${
-                (unzippedBytecode.length / 1e3).toFixed(1)
-            }KB`;
-            if (selfExtractingBytecode) {
-                infoFields['Zipped size'] = `${
-                    (selfExtractingBytecode.length / 1e3).toFixed(1)
-                }KB`;
-                infoFields['Compression'] = `${
-                    ((1 - selfExtractingBytecode.length / unzippedBytecode.length) * 100)
-                        .toFixed(1)
-                }%`;
+    $: animateZip = selfExtractingZipInitCode ? createZipAnimation() : undefined;
+    $: zAddress = $wallet ? Z_ADDRESSES[$wallet.chainId] : undefined;
+    $ : {
+        if (lastDeployedSelfExtractingZipAddress && $wallet) {
+            if (CACHE.selfExtractingZipAddress !== lastDeployedSelfExtractingZipAddress) {
+                CACHE.deploymentChainId = $wallet.chainId;
+                CACHE.selfExtractingZipAddress = lastDeployedSelfExtractingZipAddress;
+                CACHE.selfExtractingZipAddressExplorerUrl =
+                    `${EXPLORERS[$wallet.chainId]}/address/${lastDeployedSelfExtractingZipAddress}`;
+                CACHE = CACHE;
             }
-        }   
-    }
-
-    $: {
-        if (selfExtractingBytecode) {
-            animateZip = createZipAnimation();
-        } else {
-            animateZip = undefined;
         }
     }
 
@@ -114,16 +109,16 @@
             }
         }
         deployStep = DeployStep.None;
-        selfExtractingBytecode = undefined;
+        selfExtractingZipInitCode = undefined;
         if (!newBytecode) {
             unzippedBytecode = undefined;
-            selfExtractingBytecode = undefined;
+            selfExtractingZipInitCode = undefined;
             animateZip = undefined;
             return;
         }
         unzippedBytecode = Buffer.from(newBytecode, 'hex');
         const zippedBytecode = Buffer.from(pako.deflate(unzippedBytecode, { level: 9 }));
-        selfExtractingBytecode = buildSelfExtracting(
+        selfExtractingZipInitCode = buildSelfExtracting(
             unzippedBytecode,
             zippedBytecode,
             Z_ADDRESSES['1'],
@@ -137,27 +132,27 @@
                 3192,
                 Math.max(
                     unzippedBytecode!.length,
-                    selfExtractingBytecode!.length
+                    selfExtractingZipInitCode!.length
                 ),
             ));
             let tweenedLength = tweened.length;
             return () => {
-                if (!unzippedBytecode || !selfExtractingBytecode) {
+                if (!unzippedBytecode || !selfExtractingZipInitCode) {
                     return false;
                 }
                 const f = (Date.now() - startTime) / duration;
                 if (f >= 1) {
-                    tweened = selfExtractingBytecode!;
-                    tweenedLength = selfExtractingBytecode.length;
+                    tweened = selfExtractingZipInitCode!;
+                    tweenedLength = selfExtractingZipInitCode.length;
                 } else {
                     for (let i = 0; i < tweened.length; ++i) {
-                        const v1 = selfExtractingBytecode[i];
+                        const v1 = selfExtractingZipInitCode[i];
                         const v2 = unzippedBytecode[i];
                         tweened[i] = Math.floor(
                             f * (v1 || 0) + (1 - f) * (v2 || 0)
                             );
                         tweenedLength = Math.floor(
-                            f * selfExtractingBytecode.length +
+                            f * selfExtractingZipInitCode.length +
                                 (1 - f) * unzippedBytecode.length
                         );
                     }
@@ -223,10 +218,6 @@
         setBytecode(undefined);
     }
 
-    function connectWallet() {
-        // ...
-    }
-
     onMount(() => {
         const resizeHandler = () => {
             rootStyles.height = `${window.innerHeight + 0.5}px`;
@@ -271,34 +262,7 @@
             align-items: center;
         }
         .display.modal {
-            .modal-content {
-                text-align: start;
-                align-self: center;
-                color: var(--ctrl-fg-color);
-            }
-            .modal-content.connect-wallet {
-                > *:not(:last-child) {
-                    margin-bottom: 0.75em;
-                }
-                > form {
-                    > *:not(:last-child) {
-                        margin-bottom: 0.75em;
-                    }
-                    > .options {
-                        display: flex;
-                        flex-direction: column;
-                        flex-wrap: wrap;
-                    }
-                    > .submit {
-                        text-align: center;
-                        white-space: nowrap;
-                    }
-                }
-            }
-            .progress {
-                background-color: rgb(108 161 139);
-                text-align: center;
-            }
+            color: var(--ctrl-fg-color);
         }
         .display.app {
             display: grid;
@@ -389,10 +353,6 @@
                         }
                         a.unavailable {
                             text-decoration: line-through;
-                        }
-                        a.completed::before {
-                            content: "☑";
-                            opacity: 0.5;
                         }
                     }
                 }
@@ -495,59 +455,66 @@
                     --frame-color={COLORS['--console-text-color1']}
                     --bg-color={COLORS['--console-bg-color']}>
                     <div class="info-content">
-                        {#if Object.entries(infoFields).length}
-                            <div class="fields">
-                                {#each Object.entries(infoFields) as [label, value]}
+                        <div class="fields">
+                            {#if unzippedBytecode}
+                                <div class="field">
+                                    <div class="label">Input type</div>
+                                    <div class="value">{ abi ? 'artifact' : 'initcode'}</div>
+                                </div>
+                                {#if selfExtractingZipInitCode}
                                     <div class="field">
-                                        <div class="label">{label}</div>
-                                        <div class="value">{value}</div>
+                                        <div class="label">Zipped size</div>
+                                        <div class="value">{
+                                            `${
+                                                (selfExtractingZipInitCode.length / 1e3).toFixed(1)
+                                            }KB`
+                                        }</div>
                                     </div>
-                                {/each}
-                            </div>
-                        {/if}
-                        {#if selfExtractingBytecode}
+                                    <div class="field">
+                                        <div class="label">Compression</div>
+                                        <div class="value">{
+                                            `${
+                                                ((1 - selfExtractingZipInitCode.length / unzippedBytecode.length) * 100)
+                                                    .toFixed(1)
+                                            }%`
+                                        }</div>
+                                    </div>
+                                {/if}
+                            {/if}
+                            {#if CACHE.selfExtractingZipAddress && CACHE.selfExtractingZipAddressExplorerUrl}
+                                <div class="field">
+                                    <div class="label">Zipped address</div>
+                                    <div class="value"><!--
+                                        --><a href={CACHE.selfExtractingZipAddressExplorerUrl} target="_blank">{
+                                                `${CACHE.selfExtractingZipAddress.slice(0, 6)}...${CACHE.selfExtractingZipAddress.slice(-4)}`
+                                        }</a><!--
+                                    --></div>
+                                </div>
+                            {/if}
+                        </div>
+                        {#if selfExtractingZipInitCode}
                             <div class="actions">
-                                <div>[<a
-                                    class:current={!deployedAddress}
-                                    class:completed={!!deployedAddress}
-                                    on:click|preventDefault={
-                                        deployedAddress
-                                        ? undefined
-                                        : () => deployStep = DeployStep.Deploy
-                                    }
-                                    href={
-                                        deployedAddress
-                                        ? undefined
-                                        : ""
-                                    }>Deploy</a>]</div>
-                                <div>[<a
-                                    class:current={deployedAddress && !deployedWrapperAddress}
-                                    class:completed={!!deployedWrapperAddress}
-                                    class:unavailable={!abi}
-                                    on:click|preventDefault={
-                                        !abi
-                                        ? undefined
-                                        : () => deployStep = DeployStep.Wrap
-                                    }
-                                    href={
-                                        !abi
-                                        ? undefined
-                                        : ""
-                                    }>Deploy Wrapper</a>]</div>
-                                <div>[<a
-                                    class:current={deployedWrapperAddress}
-                                    class:completed={deployStep == DeployStep.Verified}
-                                    class:unavailable={!abi}
-                                    on:click|preventDefault={
-                                        !abi
-                                        ? undefined
-                                        : () => deployStep = DeployStep.Verify
-                                    }
-                                    href={
-                                        !abi
-                                        ? undefined
-                                        : ""
-                                    }>Verify Wrapper</a>]</div>
+                                {#if !CACHE.selfExtractingZipAddress}
+                                    <div>[<a
+                                        class:current={!CACHE.selfExtractingZipAddress}
+                                        on:click|preventDefault={
+                                            CACHE.selfExtractingZipAddress
+                                            ? undefined
+                                            : () => deployStep = DeployStep.Deploy
+                                        }
+                                        href={
+                                            CACHE.selfExtractingZipAddress
+                                            ? undefined
+                                            : ""
+                                        }>Deploy</a>]</div>
+                                {/if}
+                                {#if !CACHE.wrapperAddress}
+                                    <div>[<a
+                                        class:unavailable={!abi}
+                                        on:click|preventDefault={() => deployStep = DeployStep.Wrap}
+                                        href=""
+                                        >Deploy Wrapper</a>]</div>
+                                {/if}
                             </div>
                         {/if}
                     </div>
@@ -589,64 +556,63 @@
                     </div>
                 </Panel>
             </div>
-        {:else if deployStep != DeployStep.None && (!zAddress || !wallet)}
+        {:else if deployStep != DeployStep.None && (!zAddress || !$wallet)}
             <div class="display modal">
                 <Panel
                     title="Deploy"
                     --bg-color={COLORS["--ctrl-bg-color"]}
                     raised>
-                    <div class="modal-content connect-wallet">
-                        <div class="title">Connect your wallet to continue:</div>
-                        <form id="connect-wallet" on:change={() => console.log('eeee')}>
-                            <div class="options">
-                                <label><input type="radio" name="wallet-type" value="metamsk" checked /> Metamask</label>
-                                <label><input type="radio" name="wallet-type" value="rainbow" /> Rainbow</label>
-                                <label><input type="radio" name="wallet-type" value="wc" /> WalletConnect</label>
-                            </div>
-                            <div class="submit">
-                                [<a href={wallet ? undefined : ""}>{wallet ? 'Already connected' : 'Connect' }</a>]
-                            </div>
-                        </form>
-                        {#if wallet && !zAddress}
-                            <div class="chain-error">Zipped contracts are not supported on this network. Switch to another</div>
-                        {/if}
-                    </div>
+                    <ConnectWalletContent error={
+                        $wallet && !zAddress ? 'Unsupported network.' : undefined
+                    } />
                 </Panel>
             </div>
-        {:else if deployStep == DeployStep.Deploy}
-            <div class="display modal">
-                <Panel
-                    title="Deploy"
-                    --bg-color={COLORS["--ctrl-bg-color"]}
-                    raised>
-                    <div class="modal-content deploy">
-                        {#if chainId}
-                        <div>
-                            Connected to chain: {chainId}
-                        </div>
-                        {:else}
-                        <div>
-                            <a on:click|preventDefault|stopPropagation={connectWallet}>Connect wallet</a>
-                        </div>
-                        {/if}
-                        Contract Name:
-                        <input type="text" value="" placeholder="ContractName" />
-                    </div>
-                </Panel>
-            </div>
-        {:else if deployStep == DeployStep.Wrap}
-            <div class="display modal">
-                <Panel
-                    title="Deploy"
-                    --bg-color={COLORS["--ctrl-bg-color"]}
-                    raised>
-                    <div class="modal-content wrap">
-                        <div>Name your contract.</div>
-                        Contract Name:
-                        <input type="text" value="" placeholder="ContractName" />
-                    </div>
-                </Panel>
-            </div>
+        {:else if $wallet && selfExtractingZipInitCode}
+            {#if deployStep == DeployStep.Deploy}
+                <div class="display modal">
+                    <Panel
+                        title="Deploy"
+                        --bg-color={COLORS["--ctrl-bg-color"]}
+                        raised>
+                        <DeployZippedContent
+                            --emphasis-color={COLORS['--console-text-color2']}
+                            bind:selfExtractingZipAddress={lastDeployedSelfExtractingZipAddress}
+                            wallet={$wallet}
+                            initCode={selfExtractingZipInitCode}
+                            on:close={() => deployStep = DeployStep.None}
+                        />
+                    </Panel>
+                </div>
+            {:else if deployStep == DeployStep.Wrap}
+                <div class="display modal">
+                    {#if abi}
+                        <Panel
+                            title="Deploy Wrapper"
+                            --bg-color={COLORS["--ctrl-bg-color"]}
+                            raised>
+                            <DeployWrapperContent
+                                --emphasis-color={COLORS['--console-text-color2']}
+                                selfExtractingZipAddress={CACHE.selfExtractingZipAddress}
+                                unzippedContractAbi={abi}
+                                bind:wrapperAddress={lastDeployedWrapperAddress}
+                                wallet={$wallet}
+                                on:close={() => deployStep = DeployStep.None}
+                            />
+                        </Panel>
+                    {:else}
+                        <Panel
+                            title="Deploy Wrapper"
+                            --bg-color={COLORS["--ctrl-bg-color"]}
+                            raised>
+                            <InfoContent
+                                on:close={() => deployStep = DeployStep.None}
+                            >
+                                This action is only available if you provide a build artifact!
+                            </InfoContent>
+                        </Panel>
+                    {/if}
+                </div>
+            {/if}
         {/if}
     </div>
     <div class="crt-effect-1">

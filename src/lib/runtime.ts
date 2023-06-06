@@ -9,14 +9,11 @@ import codeTemplate from './sol/Wrapper.sol.handlebars?raw';
 import { numberToBytes, hexToBytes, keccak256 } from 'viem';
 import { COMPILER_VERSION  } from './worker-compiler';
 import { PUBLIC_Z_VERSION } from '$env/static/public';
+import type { Address } from 'viem';
 
-interface RuntimeResult {
+interface ForwarderResult {
     initCode: Buffer;
-    source?: {
-        compiler: string;
-        code: string;
-        optimizerRuns: number;
-    }
+    compilerInput: CompilerInput;
 }
 
 interface FunctionTemplate {
@@ -26,12 +23,10 @@ interface FunctionTemplate {
     params?: string,
 }
 
-const OPTIMIZER_RUNS = 200;
-
 export function buildSelfExtracting(
     unzippedInitCode: Buffer,
     zippedInitCode: Buffer,
-    zAddress: `0x${string}`,
+    zAddress: Address,
     ): Buffer
 {
     const runtimeCode = createSelfExtractingRuntime(
@@ -43,16 +38,15 @@ export function buildSelfExtracting(
 }
 
 export async function buildVerifiableForwarder(
-    zippedAddress: `0x${string}`,
+    zippedAddress: Address,
     contractName: string,
     abi: Abi,
-    ): Promise<RuntimeResult>
+    ): Promise<ForwarderResult>
 {
     const code = Handlebars.compile(codeTemplate)({
         version: PUBLIC_Z_VERSION,
         contractName,
         compiler: COMPILER_VERSION,
-        optimizerRuns: OPTIMIZER_RUNS,
         zippedAddress,
         zippedAddressHex: zippedAddress.slice(2).toLowerCase(),
         functions:
@@ -60,9 +54,8 @@ export async function buildVerifiableForwarder(
             .map(createFunctionTemplateFromAbi),
         structs: Object.values(createStructs(abi)),
     });
-    const solcOutput = await compile(createSolcInput({
-        [`wrapper`]: code,
-    }));
+    const compilerInput = createSolcInput({ [`wrapper`]: code });
+    const solcOutput = await compile(compilerInput);
 
     if (solcOutput.errors) {
         const errors = solcOutput.errors.filter(e => e.severity === 'error');
@@ -77,11 +70,7 @@ export async function buildVerifiableForwarder(
             solcOutput.contracts[`wrapper`][contractName]
                 .evm.bytecode.object.slice(2)
         ),
-        source: {
-            code,
-            compiler: solcOutput.metadata.compiler.version,
-            optimizerRuns: OPTIMIZER_RUNS,
-        },
+        compilerInput,
     };
 }
 
@@ -92,7 +81,7 @@ function createSolcInput(files: { [file: string]: string }): CompilerInput {
             {}, ...Object.entries(files).map(([k, v]) => ({[k]: { content: v }}))
         ),
         settings: {
-            optimizer: { enabled: true, runs: OPTIMIZER_RUNS },
+            optimizer: { enabled: false },
             outputSelection: {
                 '*': { '*': ['evm.deployedBytecode.object', 'evm.bytecode.object', 'abi']},
                 
@@ -104,7 +93,7 @@ function createSolcInput(files: { [file: string]: string }): CompilerInput {
 function createSelfExtractingRuntime(
     unzippedInitCode: Buffer,
     zippedInitCode: Buffer,
-    zAddress: `0x${string}`): Buffer
+    zAddress: Address): Buffer
 {
     return Buffer.concat([
         //// FALLBACK()
