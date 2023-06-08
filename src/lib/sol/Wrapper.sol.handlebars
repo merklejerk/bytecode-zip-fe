@@ -14,51 +14,33 @@ struct {{name}} {
 
 /// @dev Wrapper for zipped contract {{contractName}} ({{zippedAddress}}).
 contract {{contractName}} {
-	bytes32 immutable __forwarderCode1;
-	bytes12 immutable __forwarderCode2;
+	address constant ZIPPED = {{zippedAddress}};
 
-	constructor() {
-		/*	
-			PUSH0
-			PUSH0
-			CALLDATASIZE
-			PUSH0
-			PUSH20 0x000000000000000000000000000000000000
-			GAS
-			CALLDATASIZE
-			PUSH0
-			PUSH0
-			CALLDATACOPY
-			DELEGATECALL
-			PUSH0
-			RETURNDATASIZE
-			SWAP2
-			PUSH1 0x2A
-			RETURNDATASIZE
-			PUSH0	
-			PUSH0
-			RETURNDATACOPY
-			JUMPI
-			REVERT
-			JUMPDEST
-			RETURN
-		*/
-		__forwarderCode1 = hex"5f5f365f73{{zippedAddressHex}}5a365f5f37f45f";
-		__forwarderCode2 = hex"3d91602a3d5f5f3e57fd5bf3";
-	}
 	{{#each functions}}
-
 	function {{name}}({{params}})
 		external{{#if modifiers}} {{modifiers}}{{/if}}
 		{{#if returns}}
 		returns ({{returns}})
 		{{/if}}
-	{ __ftz__(); }
+	{ __forwardToZipped(); }
 	{{/each}}
 
-	function __ftz__() private {
-		(function () view) fwd;
-		assembly ("memory-safe") { fwd := sub(codesize(), 32) }
-		fwd();
+	function __forwardToZipped() private view {
+		function () fwd = __forwardToZippedNonView;
+		function () view vfwd;
+		assembly ("memory-safe") { vfwd := fwd }
+		vfwd();
+	}
+
+	function  __forwardToZippedNonView() private {
+		assembly ("memory-safe") {
+			calldatacopy(0x00, 0x00, calldatasize())
+			let s := delegatecall(gas(), ZIPPED, 0x00, calldatasize(), 0x00, 0x00)
+			returndatacopy(0x00, 0x00, returndatasize())
+			if iszero(s) {
+				revert(0x00, returndatasize())
+			}
+			return(0x00, returndatasize())
+		}
 	}
 }

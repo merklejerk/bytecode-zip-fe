@@ -16,8 +16,24 @@ export interface CompilerInput {
         optimizer: {
             enabled: boolean;
             runs?: number;
+            details?: Partial<{
+                deduplicate: boolean;
+                inliner: boolean;
+                peephole: boolean;
+                cse: boolean;
+                constantOptimizer: boolean;
+                yul: boolean;
+            }>;
         };
         viaIR?: boolean;
+        metadata?: Partial<{
+            appendCBOR: boolean;
+            useLiteralContent: boolean;
+            bytecodeHash: 'none' | 'ipfs' | 'bzzr1';
+        }>;
+        debug?: Partial<{
+            revertStrings: 'default' | 'strip' | 'debug' | 'verboseDebug';
+        }>;
         outputSelection: {
             [file: string]: {
                 [contract: string]: string[];

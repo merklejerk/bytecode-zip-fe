@@ -6,7 +6,7 @@ import {
 } from './worker-compiler';
 import Handlebars from 'handlebars';
 import codeTemplate from './sol/Wrapper.sol.handlebars?raw';
-import { numberToBytes, hexToBytes, keccak256 } from 'viem';
+import { numberToBytes, hexToBytes, keccak256, getAddress } from 'viem';
 import { COMPILER_VERSION  } from './worker-compiler';
 import { PUBLIC_Z_VERSION } from '$env/static/public';
 import type { Address } from 'viem';
@@ -47,7 +47,7 @@ export async function buildVerifiableForwarder(
         version: PUBLIC_Z_VERSION,
         contractName,
         compiler: COMPILER_VERSION,
-        zippedAddress,
+        zippedAddress: getAddress(zippedAddress),
         zippedAddressHex: zippedAddress.slice(2).toLowerCase(),
         functions:
             (abi.filter(e => e.type === 'function') as AbiFunction[])
@@ -68,7 +68,8 @@ export async function buildVerifiableForwarder(
     return {
         initCode: Buffer.from(
             solcOutput.contracts[`wrapper`][contractName]
-                .evm.bytecode.object.slice(2)
+                .evm.bytecode.object,
+            'hex',
         ),
         compilerInput,
     };
@@ -81,7 +82,9 @@ function createSolcInput(files: { [file: string]: string }): CompilerInput {
             {}, ...Object.entries(files).map(([k, v]) => ({[k]: { content: v }}))
         ),
         settings: {
-            optimizer: { enabled: false },
+            optimizer: { enabled: true, runs: 1 },
+            debug: { revertStrings: 'strip' },
+            metadata: { appendCBOR: false },
             outputSelection: {
                 '*': { '*': ['evm.deployedBytecode.object', 'evm.bytecode.object', 'abi']},
                 
@@ -125,10 +128,10 @@ function createFunctionTemplateFromAbi(fn: AbiFunction): FunctionTemplate {
         modifiers: 'view', // always view
         params: fn.inputs.length === 0
             ? undefined
-            : fn.inputs.map(i => `${encodeParameter(i)}`).join(','),
+            : fn.inputs.map(i => `${encodeParameter(i, ParamContext.PublicArgument)}`).join(','),
         returns: fn.outputs.length === 0
             ? undefined
-            : fn.outputs.map(o => `${encodeParameter(o)}`).join(','),
+            : fn.outputs.map(o => `${encodeParameter(o, ParamContext.Return)}`).join(','),
     };
 }
 
@@ -155,8 +158,7 @@ function createStructs(abi: Abi): StructMap {
                 if (i.type === 'tuple') {
                     const name = encodeTypeName(i);
                     const t = (i as AbiTupleParameter);
-                    const fields = t.components.map(c => encodeParameter(c, true));
-                    console.log(name, fields);
+                    const fields = t.components.map(c => encodeParameter(c));
                     structsByName[name] = { name, fields };
                 }
             }
@@ -165,12 +167,26 @@ function createStructs(abi: Abi): StructMap {
     return structsByName;
 }
 
-function encodeParameter(p: AbiParameter, isField: boolean = false): string {
+enum ParamContext {
+    Field,
+    PublicArgument,
+    Return,
+}
+
+function encodeParameter(p: AbiParameter, context: ParamContext = ParamContext.Return): string {
     const isMemory = p.type === 'tuple' ||
         p.type === 'bytes' ||
         p.type === 'string' ||
         p.type.match(/\[\d?]$/);
-    return `${encodeTypeName(p)}${!isField && isMemory ? ' calldata' : ''} ${p.name}`;
+    let memloc = '';
+    if (isMemory) {
+        if (context === ParamContext.Return) {
+            memloc = 'memory';
+        } else if (context === ParamContext.PublicArgument) {
+            memloc = 'calldata';
+        }
+    }
+    return [encodeTypeName(p), memloc, p.name].join(' ');
 }
 
 function encodeTypeName(p: AbiParameter): string {

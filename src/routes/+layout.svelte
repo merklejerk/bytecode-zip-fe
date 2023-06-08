@@ -71,7 +71,6 @@
     :global(input) {
         font-family: inherit;
         font-size: inherit;
-        margin-right: -1ex;
     }
     :global(input:focus) {
         outline: none !important;
@@ -92,6 +91,10 @@
         content: '[x]';
         white-space: nowrap;
         font-weight: bold;
+    }
+    :global(input[type="text"]) {
+        box-shadow: inset 0.075em 0.075em 0 rgba(black, 0.66);
+        padding: 0.35ex;
     }
     :global(label) {
         display: inline-block;

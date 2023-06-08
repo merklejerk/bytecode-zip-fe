@@ -48,23 +48,32 @@
     let animateZip: (() => boolean) | undefined;
     // Break some reactivity with an object cache.
     let CACHE = {
-        deploymentChainId: undefined as number | undefined,
         selfExtractingZipAddress: undefined as Address | undefined,
         selfExtractingZipAddressExplorerUrl: undefined as string | undefined,
         wrapperAddress: undefined as Address | undefined,
+        wrapperAddressExplorerUrl: undefined as string | undefined,
     };
 
     $: bytecodeHex = unzippedBytecode?.toString('hex') || undefined;
     $: animateZip = selfExtractingZipInitCode ? createZipAnimation() : undefined;
     $: zAddress = $wallet ? Z_ADDRESSES[$wallet.chainId] : undefined;
     $ : {
-        if (lastDeployedSelfExtractingZipAddress && $wallet) {
-            if (CACHE.selfExtractingZipAddress !== lastDeployedSelfExtractingZipAddress) {
-                CACHE.deploymentChainId = $wallet.chainId;
-                CACHE.selfExtractingZipAddress = lastDeployedSelfExtractingZipAddress;
-                CACHE.selfExtractingZipAddressExplorerUrl =
-                    `${EXPLORERS[$wallet.chainId]}/address/${lastDeployedSelfExtractingZipAddress}`;
-                CACHE = CACHE;
+        if ($wallet) {
+            if (lastDeployedSelfExtractingZipAddress) {
+                if (CACHE.selfExtractingZipAddress !== lastDeployedSelfExtractingZipAddress) {
+                    CACHE.selfExtractingZipAddress = lastDeployedSelfExtractingZipAddress;
+                    CACHE.selfExtractingZipAddressExplorerUrl =
+                        `${EXPLORERS[$wallet.chainId]}/address/${lastDeployedSelfExtractingZipAddress}`;
+                    CACHE = CACHE;
+                }
+            }
+            if (lastDeployedWrapperAddress)  {
+                if (CACHE.wrapperAddress !== lastDeployedWrapperAddress) {
+                    CACHE.wrapperAddress = lastDeployedWrapperAddress;
+                    CACHE.wrapperAddressExplorerUrl =
+                        `${EXPLORERS[$wallet.chainId]}/address/${lastDeployedWrapperAddress}`;
+                    CACHE = CACHE;
+                }
             }
         }
     }
@@ -487,6 +496,16 @@
                                     <div class="value"><!--
                                         --><a href={CACHE.selfExtractingZipAddressExplorerUrl} target="_blank">{
                                                 `${CACHE.selfExtractingZipAddress.slice(0, 6)}...${CACHE.selfExtractingZipAddress.slice(-4)}`
+                                        }</a><!--
+                                    --></div>
+                                </div>
+                            {/if}
+                            {#if CACHE.wrapperAddress}
+                                <div class="field">
+                                    <div class="label">Wrapper address</div>
+                                    <div class="value"><!--
+                                        --><a href={CACHE.wrapperAddressExplorerUrl} target="_blank">{
+                                                `${CACHE.wrapperAddress.slice(0, 6)}...${CACHE.wrapperAddress.slice(-4)}`
                                         }</a><!--
                                     --></div>
                                 </div>

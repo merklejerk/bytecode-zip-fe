@@ -3,8 +3,7 @@
     import type { PendingTransaction, Wallet } from "./wallet";
     import { createEventDispatcher } from "svelte";
     import ProgressSpinner from "./progress-spinner.svelte";
-    import { EXPLORERS, NETWORK_NAMES } from "./constants";
-    import type { Buffer } from 'buffer/';
+    import { ADDRESS_PATTERN, CONTRACT_NAME_PATTERN, EXPLORERS, NETWORK_NAMES } from "./constants";
     import type { CompilerInput } from "./worker-compiler";
     import { buildVerifiableForwarder } from "./runtime";
 
@@ -13,7 +12,6 @@
     export let unzippedContractAbi: Abi;
     export let wrapperAddress: Address | undefined = undefined;
     const dispatch = createEventDispatcher();
-    let initCode: Buffer;
     let contractName: string | undefined;
     let compilerInput: CompilerInput | undefined;
     let submitPromise: Promise<void> | undefined;
@@ -22,6 +20,13 @@
     let addressUrl: string | undefined;
     let txUrl: string | undefined;
     let error: string | undefined;
+    let explicitSelfExtractingZipAddress: Address | undefined = undefined;
+
+    $: {
+        if (selfExtractingZipAddress) {
+            explicitSelfExtractingZipAddress = selfExtractingZipAddress;
+        }
+    }
 
     $: {
         if (pendingTx) {
@@ -41,7 +46,11 @@
     }
 
     function isValidContractName(name: string | undefined): boolean {
-        return !!name && /^[a-z_][a-z0-9_]*$/.test(name);
+        return !!name && CONTRACT_NAME_PATTERN.test(name);
+    }
+   
+    function isValidAddress(v: string | undefined): boolean {
+        return !!v && ADDRESS_PATTERN.test(v);
     }
 
     function closeHandler() {
@@ -50,16 +59,15 @@
 
     function submitHandler() {
         submitPromise = (async () => {
-            if (selfExtractingZipAddress && isValidContractName(contractName)) {
+            if (explicitSelfExtractingZipAddress && isValidContractName(contractName)) {
                 try {
                     const r = await buildVerifiableForwarder(
-                        selfExtractingZipAddress,
+                        explicitSelfExtractingZipAddress,
                         contractName!,
                         unzippedContractAbi,
                     );
-                    initCode = r.initCode;
                     compilerInput = r.compilerInput;
-                    pendingTx = await wallet.deploy(initCode);
+                    pendingTx = await wallet.deploy(r.initCode);
                     receipt = await pendingTx.wait();
                 } catch (err) {
                     console.error(err);
@@ -72,6 +80,8 @@
 </script>
 
 <style lang="scss">
+    @import "$lib/common.scss";
+
     :root {
         --emphasis-color: inherit;
     }
@@ -80,14 +90,32 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 1em;
+        gap: 0.5em;
 
         > .message {
             max-width: 62ex;
             overflow: hidden;
 
-            > .network {
+            .network {
                 color: var(--emphasis-color);
+            }
+
+            form {
+                display: flex;
+                flex-direction: column;
+                margin-top: 1.5em;
+                gap: 1.5em;
+                > div {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    gap: 0.5em;
+
+                    @media (min-width: map-get($breakpoints, "lg")) {
+                        flex-direction: row;
+                        align-items: center;
+                    }
+                }
             }
         }
         > .actions {
@@ -101,6 +129,10 @@
 
         .address {
             word-wrap: break-word;
+        }
+
+        input.invalid {
+            background-color: #dfb0b0;
         }
     }
 </style>
@@ -117,16 +149,42 @@
             <span class="network">{NETWORK_NAMES[wallet.chainId]}</span><!--
             -->{#if txUrl} (<a href="{txUrl}" target="_blank">tx</a>){/if}...
         {:else}
-            Do you want to deploy a wrapper for a zipped contract?
-            You only need to do this if you want people to be able to interact
-            with your contract on etherscan.
-            <input type="text" placeholder="Contract Name" bind:value={contractName} />
-            {#if isValidContractName(contractName)}
-                Deploy a {
-                    `${(initCode.length / 1000).toFixed(1)}KB`
-                } wrapper contract on
+            <div class="notice">
+                Do you want to deploy a wrapper for a zipped contract on
                 <span class="network">{NETWORK_NAMES[wallet.chainId]}</span>?
-            {/if}
+                You only need to do this if you want to interact
+                with your contract on etherscan.
+            </div>
+            <form>
+                <div>
+                    <label class="address-input" for="zip-address">
+                        Where is the zipped contract deployed?
+                    </label>
+                    <input
+                        autofocus 
+                        type="text"
+                        id="zip-address"
+                        placeholder="Zipped address"
+                        on:paste|stopPropagation
+                        class:invalid={
+                            explicitSelfExtractingZipAddress &&
+                            !isValidAddress(explicitSelfExtractingZipAddress)
+                        }
+                        bind:value={explicitSelfExtractingZipAddress} />
+                </div>
+                <div>
+                    <label class="address-input" for="contract-name">
+                        What do you want to name this contract?
+                    </label>
+                    <input
+                        autofocus={!!explicitSelfExtractingZipAddress}
+                        type="text"
+                        id="contract-name"
+                        placeholder="Contract name"
+                        class:invalid={contractName && !isValidContractName(contractName)}
+                        bind:value={contractName} />
+                </div>
+            </form>
         {/if}
     </div>
     <div class="error">
@@ -142,7 +200,7 @@
         {:else if pendingTx || submitPromise}
             <ProgressSpinner />
         {:else}
-            {#if isValidContractName(contractName)}
+            {#if isValidContractName(contractName) && isValidAddress(explicitSelfExtractingZipAddress)}
                 <span class="action">
                     [<a href="" on:click|preventDefault={submitHandler}>Submit</a>]
                 </span>
