@@ -158,7 +158,7 @@ function createStructs(abi: Abi): StructMap {
                 if (i.type === 'tuple') {
                     const name = encodeTypeName(i);
                     const t = (i as AbiTupleParameter);
-                    const fields = t.components.map(c => encodeParameter(c));
+                    const fields = t.components.map(c => encodeParameter(c, ParamContext.Field));
                     structsByName[name] = { name, fields };
                 }
             }

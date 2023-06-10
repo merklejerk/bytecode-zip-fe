@@ -4,23 +4,33 @@
     import { createEventDispatcher } from "svelte";
     import ProgressSpinner from "./progress-spinner.svelte";
     import { ADDRESS_PATTERN, CONTRACT_NAME_PATTERN, EXPLORERS, NETWORK_NAMES } from "./constants";
-    import type { CompilerInput } from "./worker-compiler";
+    import { COMPILER_VERSION, type CompilerInput } from "./worker-compiler";
     import { buildVerifiableForwarder } from "./runtime";
+    import AddressLink from "./address-link.svelte";
+    import DosButton from "./dos-button.svelte";
+    import { verifyContract } from "./verify";
 
     export let wallet: Wallet;
-    export let selfExtractingZipAddress: Address | undefined = undefined;
+    export let selfExtractingZipAddress: Address | undefined;
     export let unzippedContractAbi: Abi;
     export let wrapperAddress: Address | undefined = undefined;
     const dispatch = createEventDispatcher();
     let contractName: string | undefined;
     let compilerInput: CompilerInput | undefined;
     let submitPromise: Promise<void> | undefined;
+    let verifyPromise: Promise<void> | undefined;
     let pendingTx : PendingTransaction | undefined;
     let receipt: TransactionReceipt | undefined;
-    let addressUrl: string | undefined;
     let txUrl: string | undefined;
+    let wrapperAddressUrl: string | undefined;
     let error: string | undefined;
     let explicitSelfExtractingZipAddress: Address | undefined = undefined;
+    let etherscanApiKey: string | undefined;
+    let isVerified: boolean = false;
+    let CACHE = {
+        // Break reactivity for deploy chain id.
+        deployChainId: 1 as number,
+    };
 
     $: {
         if (selfExtractingZipAddress) {
@@ -30,7 +40,9 @@
 
     $: {
         if (pendingTx) {
-            txUrl = `${EXPLORERS[wallet.chainId]}/tx/${pendingTx.txhash}`;
+            CACHE.deployChainId = wallet.chainId;
+            CACHE = CACHE;
+            txUrl = `${EXPLORERS[CACHE.deployChainId!]}/tx/${pendingTx.txhash}`;
         } else {
             txUrl = undefined;
         }
@@ -38,10 +50,10 @@
 
     $: {
         if (receipt) {
-            addressUrl = `${EXPLORERS[wallet.chainId]}/address/${receipt.contractAddress}`;
+            wrapperAddressUrl = `${EXPLORERS[CACHE.deployChainId]}/address/${receipt.contractAddress}`;
             wrapperAddress = receipt.contractAddress!;
         } else {
-            addressUrl = undefined;
+            wrapperAddressUrl = undefined;
         }
     }
 
@@ -53,13 +65,18 @@
         return !!v && ADDRESS_PATTERN.test(v);
     }
 
+    function isValidApiKey(v: string | undefined): boolean {
+        return !!v;
+    }
+
     function closeHandler() {
         dispatch('close');
     }
 
-    function submitHandler() {
+    function deployHandler() {
         submitPromise = (async () => {
             if (explicitSelfExtractingZipAddress && isValidContractName(contractName)) {
+                error = undefined;
                 try {
                     const r = await buildVerifiableForwarder(
                         explicitSelfExtractingZipAddress,
@@ -69,11 +86,36 @@
                     compilerInput = r.compilerInput;
                     pendingTx = await wallet.deploy(r.initCode);
                     receipt = await pendingTx.wait();
-                } catch (err) {
-                    console.error(err);
+                } catch (err: any) {
+                    if (err.message !== 'user rejected tx') {
+                        error = err.message;
+                        console.error(err);
+                    }
                 } finally {
                     submitPromise = undefined;
                 }
+            }
+        })();
+    }
+
+    function verifyHandler() {
+        verifyPromise = (async () => {
+            error = undefined;
+            try {
+                await verifyContract(
+                    EXPLORERS[CACHE.deployChainId],
+                    etherscanApiKey!,
+                    wrapperAddress!,
+                    contractName!,
+                    compilerInput!,
+                    COMPILER_VERSION,
+                );
+                isVerified = true;
+            } catch (err: any) {
+                error = err.message;
+                console.error(err);
+            } finally {
+                verifyPromise = undefined;
             }
         })();
     }
@@ -117,6 +159,10 @@
                     }
                 }
             }
+
+            form.verify-form {
+                text-align: center;
+            }
         }
         > .actions {
             width: 100%;
@@ -126,11 +172,9 @@
             gap: 2ex;
             justify-content: center;
         }
-
-        .address {
-            word-wrap: break-word;
+        > .error {
+            color: red;
         }
-
         input.invalid {
             background-color: #dfb0b0;
         }
@@ -139,11 +183,25 @@
 
 <div class="content">
     <div class="message">
-        {#if receipt}
-            Deployed wrapper contract at
-            <a href={addressUrl} target="_blank" class="address"><!--
-                -->{receipt.contractAddress}<!--
-            --></a>!
+        {#if isVerified && wrapperAddress && wrapperAddressUrl}
+            The wrapper contract at
+            <AddressLink url={wrapperAddressUrl} address={wrapperAddress} />
+            has been successfully verified!
+        {:else if wrapperAddress && wrapperAddressUrl}
+            The wrapper contract has been deployed at
+            <AddressLink url={wrapperAddressUrl} address={wrapperAddress} />
+            and now needs to be verified. Provide an etherscan API key to perform
+            this verification.
+            <form class="verify-form">
+                <label for="etherscan-api-key">
+                    <input
+                        autofocus
+                        placeholder="Etherscan API key"
+                        type="text"
+                        id="etherscan-api-key"
+                        bind:value={etherscanApiKey} />
+                </label>
+            </form>
         {:else if pendingTx || submitPromise}
             Deploying wrapper contract on
             <span class="network">{NETWORK_NAMES[wallet.chainId]}</span><!--
@@ -157,7 +215,7 @@
             </div>
             <form>
                 <div>
-                    <label class="address-input" for="zip-address">
+                    <label for="zip-address">
                         Where is the zipped contract deployed?
                     </label>
                     <input
@@ -165,7 +223,6 @@
                         type="text"
                         id="zip-address"
                         placeholder="Zipped address"
-                        on:paste|stopPropagation
                         class:invalid={
                             explicitSelfExtractingZipAddress &&
                             !isValidAddress(explicitSelfExtractingZipAddress)
@@ -173,7 +230,7 @@
                         bind:value={explicitSelfExtractingZipAddress} />
                 </div>
                 <div>
-                    <label class="address-input" for="contract-name">
+                    <label for="contract-name">
                         What do you want to name this contract?
                     </label>
                     <input
@@ -193,21 +250,22 @@
         {/if}
     </div>
     <div class="actions">
-        {#if receipt}
-            <span class="action">
-                [<a href="" on:click|preventDefault={closeHandler}>OK</a>]
-            </span>
+        {#if isVerified}
+               <DosButton on:click={closeHandler}>OK</DosButton>
+        {:else if verifyPromise}
+            <ProgressSpinner />
+        {:else if wrapperAddress}
+                <DosButton on:click={verifyHandler} disabled={!isValidApiKey(etherscanApiKey)}>Verify</DosButton>
         {:else if pendingTx || submitPromise}
             <ProgressSpinner />
         {:else}
-            {#if isValidContractName(contractName) && isValidAddress(explicitSelfExtractingZipAddress)}
-                <span class="action">
-                    [<a href="" on:click|preventDefault={submitHandler}>Submit</a>]
-                </span>
-            {/if}
-            <span class="action">
-                [<a href="" on:click|preventDefault={closeHandler}>Cancel</a>]
-            </span>
+            <DosButton
+                on:click={deployHandler}
+                disabled={!isValidContractName(contractName) || !isValidAddress(explicitSelfExtractingZipAddress)}
+                >Deploy</DosButton>
+            <DosButton
+                on:click={closeHandler}
+            >Cancel</DosButton>
         {/if}
     </div>
 </div>

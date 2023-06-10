@@ -23,12 +23,14 @@
 	"type": "module",
 	"dependencies": {
 		"@picocss/pico": "^1.5.10",
+		"@types/isomorphic-fetch": "^0.0.36",
 		"@types/node": "^20.2.5",
 		"@types/pako": "^2.0.0",
 		"buffer": "^6.0.3",
 		"events": "^3.3.0",
 		"ganache": "^7.8.0",
 		"handlebars": "^4.7.7",
+		"isomorphic-fetch": "^3.0.0",
 		"pako": "^2.1.0",
 		"underscore": "^1.13.6",
 		"viem": "^0.3.40"

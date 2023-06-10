@@ -12,3 +12,4 @@ export const EXPLORERS = {
 
 export const ADDRESS_PATTERN = /^0x[a-f0-9]{40}$/i;
 export const CONTRACT_NAME_PATTERN = /^[a-z_][a-z0-9_]*$/i;
+export const NULL_ADDRESS = '0x0000000000000000000000000000000000000000';

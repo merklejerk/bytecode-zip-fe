@@ -9,9 +9,10 @@
     import { PUBLIC_Z_ADDRESSES_JSON } from '$env/static/public';
     import ConnectWalletContent, { wallet } from '$lib/connect-wallet-content.svelte';
     import DeployZippedContent from '$lib/deploy-zipped-content.svelte';
-    import { EXPLORERS, NETWORK_NAMES } from '$lib/constants';
+    import { EXPLORERS, NETWORK_NAMES, NULL_ADDRESS } from '$lib/constants';
     import DeployWrapperContent from '$lib/deploy-wrapper-content.svelte';
     import InfoContent from '$lib/info-content.svelte';
+    import AddressLink from '$lib/address-link.svelte';
     
     enum DeployStep {
         None,
@@ -36,6 +37,7 @@
         height: '100vh',
     };
     let bytecodeHex: string | undefined;
+    let zippedBytecode: Buffer | undefined;
     let unzippedBytecode: Buffer | undefined;
     let selfExtractingZipInitCode: Buffer | undefined;
     let status: string | undefined;
@@ -55,8 +57,20 @@
     };
 
     $: bytecodeHex = unzippedBytecode?.toString('hex') || undefined;
-    $: animateZip = selfExtractingZipInitCode ? createZipAnimation() : undefined;
     $: zAddress = $wallet ? Z_ADDRESSES[$wallet.chainId] : undefined;
+    $: {
+        if (unzippedBytecode && zippedBytecode) {
+            selfExtractingZipInitCode = buildSelfExtracting(
+                unzippedBytecode,
+                zippedBytecode,
+                $wallet ? Z_ADDRESSES[$wallet.chainId] : NULL_ADDRESS,
+            );
+            animateZip = createZipAnimation();
+        } else {
+            selfExtractingZipInitCode = undefined;
+            animateZip = undefined;
+        }
+    }
     $ : {
         if ($wallet) {
             if (lastDeployedSelfExtractingZipAddress) {
@@ -118,20 +132,13 @@
             }
         }
         deployStep = DeployStep.None;
-        selfExtractingZipInitCode = undefined;
         if (!newBytecode) {
             unzippedBytecode = undefined;
-            selfExtractingZipInitCode = undefined;
-            animateZip = undefined;
+            zippedBytecode = undefined;
             return;
         }
         unzippedBytecode = Buffer.from(newBytecode, 'hex');
-        const zippedBytecode = Buffer.from(pako.deflate(unzippedBytecode, { level: 9 }));
-        selfExtractingZipInitCode = buildSelfExtracting(
-            unzippedBytecode,
-            zippedBytecode,
-            Z_ADDRESSES['1'],
-        );
+        zippedBytecode = Buffer.from(pako.deflate(unzippedBytecode, { level: 6, raw: true }));
     }
 
     function createZipAnimation() {
@@ -169,7 +176,7 @@
                 bytecodeHex = tweened.slice(0, tweenedLength).toString('hex');
                 return f < 1;
             };
-        })(1e3);
+        })(1.5e3);
     }
 
     function setStatus(newStatus: string | undefined) {
@@ -184,6 +191,13 @@
     }
 
     function pasteHandler(e: ClipboardEvent) {
+        const target = e.target;
+        if (target instanceof HTMLElement) {
+            if (target.tagName === 'INPUT') {
+                return;
+            }
+        }
+        e.preventDefault();
         const raw = e.clipboardData?.getData('text');
         try {
             if (!(raw?.match(/^(0x)?([a-f0-9]{2})+$/i))) {
@@ -444,7 +458,7 @@
 
 </style>
 
-<svelte:document on:paste|preventDefault={pasteHandler} on:keyup={keyHandler} />
+<svelte:document on:paste={pasteHandler} on:keyup={keyHandler} />
 <main
     style={Object.entries(rootStyles).map(([k,v]) => `${k}:${v}`).join(';')}
     on:drop|stopPropagation|preventDefault={dropHandler}
@@ -494,19 +508,21 @@
                                 <div class="field">
                                     <div class="label">Zipped address</div>
                                     <div class="value"><!--
-                                        --><a href={CACHE.selfExtractingZipAddressExplorerUrl} target="_blank">{
-                                                `${CACHE.selfExtractingZipAddress.slice(0, 6)}...${CACHE.selfExtractingZipAddress.slice(-4)}`
-                                        }</a><!--
+                                        --><AddressLink
+                                                url={CACHE.selfExtractingZipAddressExplorerUrl}
+                                                address={CACHE.selfExtractingZipAddress}
+                                            /><!--
                                     --></div>
                                 </div>
                             {/if}
-                            {#if CACHE.wrapperAddress}
+                            {#if CACHE.wrapperAddress && CACHE.wrapperAddressExplorerUrl}
                                 <div class="field">
                                     <div class="label">Wrapper address</div>
                                     <div class="value"><!--
-                                        --><a href={CACHE.wrapperAddressExplorerUrl} target="_blank">{
-                                                `${CACHE.wrapperAddress.slice(0, 6)}...${CACHE.wrapperAddress.slice(-4)}`
-                                        }</a><!--
+                                        --><AddressLink
+                                                url={CACHE.wrapperAddressExplorerUrl}
+                                                address={CACHE.wrapperAddress}
+                                            /><!--
                                     --></div>
                                 </div>
                             {/if}

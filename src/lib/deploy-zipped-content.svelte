@@ -5,6 +5,7 @@
     import ProgressSpinner from "./progress-spinner.svelte";
     import { EXPLORERS, NETWORK_NAMES } from "./constants";
     import type { Buffer } from 'buffer/';
+    import AddressLink from "./address-link.svelte";
 
     export let initCode: Buffer;
     export let wallet: Wallet;
@@ -15,9 +16,16 @@
     let receipt: TransactionReceipt | undefined;
     let addressUrl: string | undefined;
     let txUrl: string | undefined;
+    let error: string | undefined;
+    let CACHE = {
+        // Break reactivity for deploy chain id.
+        deployChainId: 1 as number,
+    };
 
     $: {
         if (pendingTx) {
+            CACHE.deployChainId = wallet.chainId;
+            CACHE = CACHE;
             txUrl = `${EXPLORERS[wallet.chainId]}/tx/${pendingTx.txhash}`;
         } else {
             txUrl = undefined;
@@ -26,7 +34,7 @@
 
     $: {
         if (receipt) {
-            addressUrl = `${EXPLORERS[wallet.chainId]}/address/${receipt.contractAddress}`;
+            addressUrl = `${EXPLORERS[CACHE.deployChainId]}/address/${receipt.contractAddress}`;
             selfExtractingZipAddress = receipt.contractAddress!;
         } else {
             addressUrl = undefined;
@@ -39,11 +47,15 @@
 
     function submitHandler() {
         submitPromise = (async () => {
+            error = undefined;
             try {
                 pendingTx = await wallet.deploy(initCode);
                 receipt = await pendingTx.wait();
-            } catch (err) {
-                console.error(err);
+            } catch (err: any) {
+                if (err.message !== 'user rejected tx') {
+                    error = err.message;
+                    console.error(err);
+                }
             } finally {
                 submitPromise = undefined;
             }
@@ -70,7 +82,6 @@
                 color: var(--emphasis-color);
             }
         }
-
         > .actions {
             width: 100%;
             display: flex;
@@ -79,29 +90,33 @@
             gap: 2ex;
             justify-content: center;
         }
-
-        .address {
-            word-wrap: break-word;
+        > .error {
+            color: red;
         }
     }
 </style>
 
 <div class="content">
     <div class="message">
-        {#if receipt}
+        {#if receipt && receipt.contractAddress && addressUrl}
             Deployed zipped contract at
             <a href={addressUrl} target="_blank" class="address"><!--
-                -->{receipt.contractAddress}<!--
+                --><AddressLink url={addressUrl} address={receipt.contractAddress} /><!--
             --></a>!
         {:else if pendingTx || submitPromise}
             Deploying zipped contract on
-            <span class="network">{NETWORK_NAMES[wallet.chainId]}</span><!--
+            <span class="network">{NETWORK_NAMES[CACHE.deployChainId]}</span><!--
             -->{#if txUrl} (<a href="{txUrl}" target="_blank">tx</a>){/if}...
         {:else}
             Deploy a {
                 `${(initCode.length / 1000).toFixed(1)}KB`
             } zipped contract on
             <span class="network">{NETWORK_NAMES[wallet.chainId]}</span>?
+        {/if}
+    </div>
+    <div class="error">
+        {#if error}
+            { error }
         {/if}
     </div>
     <div class="actions">

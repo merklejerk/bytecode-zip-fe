@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { createPublicClient, createWalletClient, custom, type Address, type PublicClient, type TransactionReceipt, type WalletClient } from "viem";
+import { createPublicClient, createWalletClient, custom, type Address, type PublicClient, type TransactionReceipt, type WalletClient, type Hash } from "viem";
 import type { Buffer } from 'buffer/';
 
 export abstract class Wallet extends EventEmitter {    
@@ -76,17 +76,27 @@ export class MetamaskWallet extends Wallet {
         if (!this.isConnected) {
             throw new Error('not connected');
         }
-        const txHash = await this._wallet!.sendTransaction({
-            chain: null,
-            account: this._account!,
-            data: `0x${initCode.toString('hex')}`,
-        });
+        let txHash: Hash;
+        try {
+            txHash = await this._wallet!.sendTransaction({
+                chain: null,
+                account: this._account!,
+                data: `0x${initCode.toString('hex')}`,
+            });
+        } catch (err: any) {
+            console.warn(err);
+            throw new Error('user rejected tx');
+        }
         return {
             txhash: txHash,
-            wait: () => {
-                return this._client.waitForTransactionReceipt({
+            wait: async () => {
+                const r = await this._client.waitForTransactionReceipt({
                     hash: txHash,
                 });
+                if (r.status !== 'success') {
+                    throw new Error('Transaction reverted');
+                }
+                return r;
             },
         };
     }
