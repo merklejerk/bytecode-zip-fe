@@ -128,7 +128,7 @@ function createFunctionTemplateFromAbi(fn: AbiFunction): FunctionTemplate {
         modifiers: 'view', // always view
         params: fn.inputs.length === 0
             ? undefined
-            : fn.inputs.map(i => `${encodeParameter(i, ParamContext.PublicArgument)}`).join(','),
+            : fn.inputs.map(i => `${encodeParameter(i, ParamContext.PublicArgument)}`).join(', '),
         returns: fn.outputs.length === 0
             ? undefined
             : fn.outputs.map(o => `${encodeParameter(o, ParamContext.Return)}`).join(','),
@@ -186,7 +186,7 @@ function encodeParameter(p: AbiParameter, context: ParamContext = ParamContext.R
             memloc = 'calldata';
         }
     }
-    return [encodeTypeName(p), memloc, p.name].join(' ');
+    return [encodeTypeName(p), memloc, p.name].filter(s => !!s).join(' ');
 }
 
 function encodeTypeName(p: AbiParameter): string {

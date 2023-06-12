@@ -347,7 +347,7 @@
                     .logo-container {
                         flex: 1 1 auto;
                         .logo {
-                            // margin: 1em 1ex;
+                            margin: 0.5em;
                             background: url('logo.svg');
                             height: 100%;
                             min-height: 5em;
