@@ -17,6 +17,8 @@
         display: flex;
         flex-direction: column;
         line-height: 1.33em;
+        align-items: stretch;
+        justify-content: stretch;
 
         > .frame {
             flex: 0 0 auto;
@@ -49,6 +51,8 @@
 
         > .panel-content {
             flex: 1 1 100%;
+            display: flex;
+            flex-direction: column;
             background-color: var(--bg-color);
             padding: 1ex;
             margin: calc(0) calc((4px + 3px) * 2) calc((4px + 3px) * 2) calc((4px + 3px) * 2);

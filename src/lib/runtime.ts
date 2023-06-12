@@ -155,9 +155,9 @@ function createStructs(abi: Abi): StructMap {
     for (const e of abi) {
         if (e.type === 'function') {
             for (const i of [...e.inputs, ...e.outputs]) {
-                if (i.type === 'tuple') {
-                    const name = encodeTypeName(i);
-                    const t = (i as AbiTupleParameter);
+                if (i.type.startsWith('tuple')) {
+                    const name = /^[^[]+/.exec(encodeTypeName(i))![0];
+                    const t = (i as AbiTupleParameter);7
                     const fields = t.components.map(c => encodeParameter(c, ParamContext.Field));
                     structsByName[name] = { name, fields };
                 }
@@ -190,8 +190,8 @@ function encodeParameter(p: AbiParameter, context: ParamContext = ParamContext.R
 }
 
 function encodeTypeName(p: AbiParameter): string {
-    if (p.type === 'tuple') {
-        const m = /^struct ([^\s.]+\.)?([\S]+)/.exec(p.internalType!);
+    if (p.type.startsWith('tuple')) {
+        const m = /^struct (\S.+?\.)?(\S+)/.exec(p.internalType!);
         if (m![1]) {
             return `${m![1].slice(0, -1)}__${m![2]}`;
         }

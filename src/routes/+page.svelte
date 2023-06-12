@@ -9,7 +9,7 @@
     import { PUBLIC_Z_ADDRESSES_JSON } from '$env/static/public';
     import ConnectWalletContent, { wallet } from '$lib/connect-wallet-content.svelte';
     import DeployZippedContent from '$lib/deploy-zipped-content.svelte';
-    import { EXPLORERS, NETWORK_NAMES, NULL_ADDRESS } from '$lib/constants';
+    import { EXPLORERS, NULL_ADDRESS } from '$lib/constants';
     import DeployWrapperContent from '$lib/deploy-wrapper-content.svelte';
     import InfoContent from '$lib/info-content.svelte';
     import AddressLink from '$lib/address-link.svelte';
@@ -31,6 +31,12 @@
         '--ctrl-fg-color': '#111',
         '--ctrl-bg-color': '#c0c0c0',
     };
+    const EMPTY_CACHE = Object.freeze({
+        selfExtractingZipAddress: undefined as Address | undefined,
+        selfExtractingZipAddressExplorerUrl: undefined as string | undefined,
+        wrapperAddress: undefined as Address | undefined,
+        wrapperAddressExplorerUrl: undefined as string | undefined,
+    });
 
     let rootStyles: Record<string, string> = {
         ...COLORS,
@@ -49,12 +55,7 @@
     let lastDeployedWrapperAddress: Address | undefined;
     let animateZip: (() => boolean) | undefined;
     // Break some reactivity with an object cache.
-    let CACHE = {
-        selfExtractingZipAddress: undefined as Address | undefined,
-        selfExtractingZipAddressExplorerUrl: undefined as string | undefined,
-        wrapperAddress: undefined as Address | undefined,
-        wrapperAddressExplorerUrl: undefined as string | undefined,
-    };
+    let CACHE = EMPTY_CACHE;
 
     $: bytecodeHex = unzippedBytecode?.toString('hex') || undefined;
     $: zAddress = $wallet ? Z_ADDRESSES[$wallet.chainId] : undefined;
@@ -75,18 +76,22 @@
         if ($wallet) {
             if (lastDeployedSelfExtractingZipAddress) {
                 if (CACHE.selfExtractingZipAddress !== lastDeployedSelfExtractingZipAddress) {
-                    CACHE.selfExtractingZipAddress = lastDeployedSelfExtractingZipAddress;
-                    CACHE.selfExtractingZipAddressExplorerUrl =
-                        `${EXPLORERS[$wallet.chainId]}/address/${lastDeployedSelfExtractingZipAddress}`;
-                    CACHE = CACHE;
+                    CACHE = {
+                        ...CACHE,
+                        selfExtractingZipAddress: lastDeployedSelfExtractingZipAddress,
+                        selfExtractingZipAddressExplorerUrl:
+                            `${EXPLORERS[$wallet.chainId]}/address/${lastDeployedSelfExtractingZipAddress}`,
+                    };
                 }
             }
             if (lastDeployedWrapperAddress)  {
                 if (CACHE.wrapperAddress !== lastDeployedWrapperAddress) {
-                    CACHE.wrapperAddress = lastDeployedWrapperAddress;
-                    CACHE.wrapperAddressExplorerUrl =
-                        `${EXPLORERS[$wallet.chainId]}/address/${lastDeployedWrapperAddress}`;
-                    CACHE = CACHE;
+                    CACHE = {
+                        ...CACHE,
+                        wrapperAddress: lastDeployedWrapperAddress,
+                        wrapperAddressExplorerUrl:
+                            `${EXPLORERS[$wallet.chainId]}/address/${lastDeployedWrapperAddress}`,
+                    };
                 }
             }
         }
@@ -132,6 +137,9 @@
             }
         }
         deployStep = DeployStep.None;
+        lastDeployedSelfExtractingZipAddress = undefined;
+        lastDeployedWrapperAddress = undefined;
+        CACHE = EMPTY_CACHE;
         if (!newBytecode) {
             unzippedBytecode = undefined;
             zippedBytecode = undefined;
@@ -329,56 +337,77 @@
                     flex: 1 1 auto;
                     width: 100%;
                 }
-            
-                .info-content {
+
+                .info-pane-items {
                     display: flex;
                     flex-direction: column;
-                    gap: 2em;
                     height: 100%;
-                    justify-content: center;
-                    overflow: hidden;
-                    
-                    .fields > .field {  
+                    gap: 1em;
 
-                        > * {
-                            margin-bottom: 0.25em;
-                        }
-                        > .label {
-                            white-space: nowrap;
-                            float: left;
-                        }
-                        > .label::after {
-                            content: "..................................................................................................................";
-                        }
-    
-                        > .value {
-                            white-space: nowrap;
-                            float: right;
-                            color: var(--console-text-color2);
-                        }
-                        > .value::before {
-                            content: "..................................................................................................................";
-                            color: var(--console-text-color1);
+                    .logo-container {
+                        flex: 1 1 auto;
+                        .logo {
+                            // margin: 1em 1ex;
+                            background: url('logo.svg');
+                            height: 100%;
+                            min-height: 5em;
+                            background-size: contain;
+                            background-position: center;
+                            background-repeat: no-repeat;
                         }
                     }
-    
-                    > .actions {
+                
+                    .info-content {
+                        flex: 5 1 auto;
                         display: flex;
+                        flex-direction: column;
+                        gap: 2em;
                         justify-content: center;
-                        gap: 0 2ex;
-                        flex-wrap: wrap;
-
-                        > * {
-                            white-space: nowrap;
+                        overflow: hidden;
+                        
+                        .fields > .field {  
+    
+                            > * {
+                                margin-bottom: 0.25em;
+                            }
+                            > .label {
+                                white-space: nowrap;
+                                float: left;
+                            }
+                            > .label::after {
+                                content: "..................................................................................................................";
+                            }
+        
+                            > .value {
+                                white-space: nowrap;
+                                float: right;
+                                color: var(--console-text-color2);
+                            }
+                            > .value::before {
+                                content: "..................................................................................................................";
+                                color: var(--console-text-color1);
+                            }
                         }
-                        a.current {
-                            @extend .blink;
-                        }
-                        a.unavailable {
-                            text-decoration: line-through;
+        
+                        > .actions {
+                            display: flex;
+                            justify-content: center;
+                            gap: 0 2ex;
+                            flex-wrap: wrap;
+    
+                            > * {
+                                white-space: nowrap;
+                            }
+                            a.current {
+                                @extend .blink;
+                            }
+                            a.unavailable {
+                                text-decoration: line-through;
+                            }
                         }
                     }
                 }
+
             }
             > .status-bar {
                 position: relative;
@@ -477,81 +506,86 @@
                 title="INFO"
                     --frame-color={COLORS['--console-text-color1']}
                     --bg-color={COLORS['--console-bg-color']}>
-                    <div class="info-content">
-                        <div class="fields">
-                            {#if unzippedBytecode}
-                                <div class="field">
-                                    <div class="label">Input type</div>
-                                    <div class="value">{ abi ? 'artifact' : 'initcode'}</div>
-                                </div>
-                                {#if selfExtractingZipInitCode}
+                    <div class="info-pane-items">
+                        <div class="logo-container">
+                            <div class="logo" />
+                        </div>
+                        <div class="info-content">
+                            <div class="fields">
+                                {#if unzippedBytecode}
                                     <div class="field">
-                                        <div class="label">Zipped size</div>
-                                        <div class="value">{
-                                            `${
-                                                (selfExtractingZipInitCode.length / 1e3).toFixed(1)
-                                            }KB`
-                                        }</div>
+                                        <div class="label">Input type</div>
+                                        <div class="value">{ abi ? 'artifact' : 'initcode'}</div>
                                     </div>
+                                    {#if selfExtractingZipInitCode}
+                                        <div class="field">
+                                            <div class="label">Zipped size</div>
+                                            <div class="value">{
+                                                `${
+                                                    (selfExtractingZipInitCode.length / 1e3).toFixed(1)
+                                                }KB`
+                                            }</div>
+                                        </div>
+                                        <div class="field">
+                                            <div class="label">Compression</div>
+                                            <div class="value">{
+                                                `${
+                                                    ((1 - selfExtractingZipInitCode.length / unzippedBytecode.length) * 100)
+                                                        .toFixed(1)
+                                                }%`
+                                            }</div>
+                                        </div>
+                                    {/if}
+                                {/if}
+                                {#if CACHE.selfExtractingZipAddress && CACHE.selfExtractingZipAddressExplorerUrl}
                                     <div class="field">
-                                        <div class="label">Compression</div>
-                                        <div class="value">{
-                                            `${
-                                                ((1 - selfExtractingZipInitCode.length / unzippedBytecode.length) * 100)
-                                                    .toFixed(1)
-                                            }%`
-                                        }</div>
+                                        <div class="label">Zipped address</div>
+                                        <div class="value"><!--
+                                            --><AddressLink
+                                                    url={CACHE.selfExtractingZipAddressExplorerUrl}
+                                                    address={CACHE.selfExtractingZipAddress}
+                                                /><!--
+                                        --></div>
                                     </div>
                                 {/if}
-                            {/if}
-                            {#if CACHE.selfExtractingZipAddress && CACHE.selfExtractingZipAddressExplorerUrl}
-                                <div class="field">
-                                    <div class="label">Zipped address</div>
-                                    <div class="value"><!--
-                                        --><AddressLink
-                                                url={CACHE.selfExtractingZipAddressExplorerUrl}
-                                                address={CACHE.selfExtractingZipAddress}
-                                            /><!--
-                                    --></div>
-                                </div>
-                            {/if}
-                            {#if CACHE.wrapperAddress && CACHE.wrapperAddressExplorerUrl}
-                                <div class="field">
-                                    <div class="label">Wrapper address</div>
-                                    <div class="value"><!--
-                                        --><AddressLink
-                                                url={CACHE.wrapperAddressExplorerUrl}
-                                                address={CACHE.wrapperAddress}
-                                            /><!--
-                                    --></div>
+                                {#if CACHE.wrapperAddress && CACHE.wrapperAddressExplorerUrl}
+                                    <div class="field">
+                                        <div class="label">Wrapper address</div>
+                                        <div class="value"><!--
+                                            --><AddressLink
+                                                    url={CACHE.wrapperAddressExplorerUrl}
+                                                    address={CACHE.wrapperAddress}
+                                                /><!--
+                                        --></div>
+                                    </div>
+                                {/if}
+                            </div>
+                            {#if selfExtractingZipInitCode}
+                                <div class="actions">
+                                    {#if !CACHE.selfExtractingZipAddress}
+                                        <div>[<a
+                                            class:current={!CACHE.selfExtractingZipAddress}
+                                            on:click|preventDefault={
+                                                CACHE.selfExtractingZipAddress
+                                                ? undefined
+                                                : () => deployStep = DeployStep.Deploy
+                                            }
+                                            href={
+                                                CACHE.selfExtractingZipAddress
+                                                ? undefined
+                                                : ""
+                                            }>Deploy</a>]</div>
+                                    {/if}
+                                    {#if !CACHE.wrapperAddress}
+                                        <div>[<a
+                                            class:unavailable={!abi}
+                                            on:click|preventDefault={() => deployStep = DeployStep.Wrap}
+                                            href=""
+                                            >Deploy Wrapper</a>]</div>
+                                    {/if}
                                 </div>
                             {/if}
                         </div>
-                        {#if selfExtractingZipInitCode}
-                            <div class="actions">
-                                {#if !CACHE.selfExtractingZipAddress}
-                                    <div>[<a
-                                        class:current={!CACHE.selfExtractingZipAddress}
-                                        on:click|preventDefault={
-                                            CACHE.selfExtractingZipAddress
-                                            ? undefined
-                                            : () => deployStep = DeployStep.Deploy
-                                        }
-                                        href={
-                                            CACHE.selfExtractingZipAddress
-                                            ? undefined
-                                            : ""
-                                        }>Deploy</a>]</div>
-                                {/if}
-                                {#if !CACHE.wrapperAddress}
-                                    <div>[<a
-                                        class:unavailable={!abi}
-                                        on:click|preventDefault={() => deployStep = DeployStep.Wrap}
-                                        href=""
-                                        >Deploy Wrapper</a>]</div>
-                                {/if}
-                            </div>
-                        {/if}
                     </div>
                 </Panel>
             </div>
