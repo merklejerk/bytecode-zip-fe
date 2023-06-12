@@ -348,7 +348,7 @@
                         flex: 1 1 auto;
                         .logo {
                             margin: 0.5em;
-                            background: url('logo.svg');
+                            background: url('/logo.svg');
                             height: 100%;
                             min-height: 5em;
                             background-size: contain;
