@@ -59,6 +59,8 @@
 </script>
 
 <style lang="scss">
+    @import "$lib/common.scss";
+
     .root {
         display: flex;
         flex-direction: row;
