@@ -4,10 +4,6 @@ on:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      build_branch:
-        type: string
-        default: gh-pages
 
 jobs:
   build:
@@ -18,15 +14,15 @@ jobs:
         with:
           node-version: '20'
       - run: echo  '${{ vars.BUILD_DOTENV }}' > .env
-      - run: npm i
+      - run: npm i --include=dev
       - run: npm run build
       - run: npm run
       - run: |
-          git switch -f --orphan ${{ github.events.inputs.build_branch }} \
+          git switch -f --orphan ${{ vars.BUILD_BRANCH }} \
           && git reset \
           && git add -f build \
           && git config user.email 'actions@github.com' \
           && git commit -m 'build' \
-          && git push -f -u origin ${{ github.events.inputs.build_branch }}
+          && git push -f -u origin ${{ vars.BUILD_BRANCH }}
     
 
