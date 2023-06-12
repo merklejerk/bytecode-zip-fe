@@ -17,6 +17,7 @@ jobs:
       - run: npm i --include=dev
       - run: npm run build
       - run: touch 'build/.nojekyll'
+      - run: echo 'bytecode.zip' > 'build/CNAME'
       - run: |
           git switch -f --orphan ${{ vars.BUILD_BRANCH }} \
           && git reset \
