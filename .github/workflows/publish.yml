@@ -16,11 +16,11 @@ jobs:
       - run: echo  '${{ vars.BUILD_DOTENV }}' > .env
       - run: npm i --include=dev
       - run: npm run build
-      - run: npm run
+      - run: touch .nojekyll
       - run: |
           git switch -f --orphan ${{ vars.BUILD_BRANCH }} \
           && git reset \
-          && git add -f build \
+          && git add -f build .nojekyll \
           && git config user.name 'github-actions' \
           && git config user.email 'actions@github.com' \
           && git commit -m 'build' \
