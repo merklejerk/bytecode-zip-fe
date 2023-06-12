@@ -17,16 +17,17 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: '20'
+      - 
       - run: echo  '${{ vars.BUILD_DOTENV }}' > .env
       - run: npm i
       - run: npm run build
       - run: npm run
       - run: |
-          git switch -f --orphan ${{ inputs.build_branch }} \
+          git switch -f --orphan ${{ github.events.inputs.build_branch }} \
           && git reset \
           && git add -f build \
           && git config user.email 'actions@github.com' \
           && git commit -m 'build' \
-          && git push -f -u origin ${{ inputs.build_branch }}
+          && git push -f -u origin ${{ github.events.inputs.build_branch }}
     
 
