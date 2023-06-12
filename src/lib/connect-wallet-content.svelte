@@ -74,7 +74,7 @@
     <form id="connect-wallet">
         <div class="options">
             <label><input type="radio" bind:group={desiredWalletType} name="wallet-type" value="metamask" checked /> Metamask</label>
-            <label><input type="radio" bind:group={desiredWalletType} name="wallet-type" value="wc" /> WalletConnect</label>
+            <!-- <label><input type="radio" bind:group={desiredWalletType} name="wallet-type" value="wc" /> WalletConnect</label> -->
         </div>
         <div class="submit">
             {#if $wallet && $wallet.type === desiredWalletType}
