@@ -24,6 +24,7 @@ jobs:
           && git config user.name 'github-actions' \
           && git config user.email 'actions@github.com' \
           && git commit -m 'build' \
-          && git subtree push --prefix build origin ${{ vars.BUILD_BRANCH }}
+          && git subtree split --prefix build -b gh-pages \
+          && git push -f origin gh-pages:gh-pages ${{ vars.BUILD_BRANCH }}
     
 
