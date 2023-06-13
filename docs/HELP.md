@@ -3,7 +3,7 @@
 [bytecode.zip](https://bytecode.zip) lets you deploy [zipped contracts](https://github.com/merklejerk/zipped-contracts) and [wrapper contracts](#deploy-a-wrapper-contract) from your browser. It supports Ethereum mainnet, Goerli testnet, and Sepolia testnet networks. As always, you should ensure your contract works on a testnet before deploying to mainnet. 
 
 ### Provide the Unzipped Bytecode
-To get started, you can provide either raw initcode or a build artifact for the contract you want to zip.
+To get started, you can provide either raw initcode or a build artifact for the contract you want to zip (or wrap).
 
 **Option 1: Providing Raw Initcode (Advanced)**
 
