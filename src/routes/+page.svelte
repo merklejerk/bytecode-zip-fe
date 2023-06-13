@@ -5,7 +5,7 @@
     import HexEditor from "../lib/hex-editor.svelte";
     import pako from 'pako';
     import { Buffer } from 'buffer/';
-    import { buildSelfExtracting } from '../lib/runtime';
+    import { buildSelfExtracting, isConstructorArgumentFree } from '../lib/runtime';
     import { PUBLIC_Z_ADDRESSES_JSON } from '$env/static/public';
     import ConnectWalletContent, { wallet } from '$lib/connect-wallet-content.svelte';
     import DeployZippedContent from '$lib/deploy-zipped-content.svelte';
@@ -81,7 +81,7 @@
                         selfExtractingZipAddress: lastDeployedSelfExtractingZipAddress,
                         selfExtractingZipAddressExplorerUrl:
                             `${EXPLORERS[$wallet.chainId]}/address/${lastDeployedSelfExtractingZipAddress}`,
-                    };
+                    };                                                                                                                                                                                                                                                                  
                 }
             }
             if (lastDeployedWrapperAddress)  {
@@ -105,10 +105,27 @@
             throw new Error(`Invalid JSON file!`);
         }
         if (typeof(artifact) !== 'object') {
-            throw new Error(`Invalid build artifact file!'`);
+            throw new Error(`Invalid build artifact file!`);
+        }
+        if (!isConstructorArgumentFree(artifact.abi)) {
+            throw new Error(`Constructor args not supported!`);
+        }
+        if (doesArtifactHaveLinkReferences(artifact)) {
+            throw new Error(`External libraries are not supported!`);
         }
         abi = artifact.abi;
         setBytecode(getArtifactBytecode(artifact));
+    }
+
+    function doesArtifactHaveLinkReferences(artifact: any): boolean {
+        const r = artifact.bytecode?.linkReferences ||
+            artifact.data.bytecode?.linkReferences ||
+            artifact.linkReferences ||
+            artifact.compilerOutput?.bytecode?.linkReferences;
+        if (typeof(r) === 'object') {
+            return Object.values(r).length != 0;
+        }
+        return Array.isArray(r) && r.length != 0;
     }
 
     function getArtifactBytecode(artifact: any): string {
@@ -303,7 +320,7 @@
                                  "status-bar";
             align-items: start;
             @media (min-width: map-get($breakpoints, "lg")) {
-                grid-template: 1fr minmax(1.5em, auto) / 10fr 4fr;
+                grid-template: 1fr minmax(1.5em, auto) / 10fr 5fr;
                 grid-template-areas: "editor info-pane"
                                      "status-bar status-bar";
                                 
@@ -327,11 +344,6 @@
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                justify-content: center;
-                @media (min-width: map-get($breakpoints, "lg")) {
-                    flex: 0 1 25vh;
-                    align-self: start;
-                }
 
                 :global(> * > *) {
                     flex: 1 1 auto;
@@ -362,7 +374,6 @@
                         display: flex;
                         flex-direction: column;
                         gap: 2em;
-                        justify-content: center;
                         overflow: hidden;
                         
                         .fields > .field {  

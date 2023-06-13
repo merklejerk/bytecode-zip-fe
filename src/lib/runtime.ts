@@ -23,6 +23,15 @@ interface FunctionTemplate {
     params?: string,
 }
 
+export function isConstructorArgumentFree(abi: Abi): boolean {
+    for (const e of abi) {
+        if (e.type === 'constructor') {
+            return !(e.inputs?.length);
+        }
+    }
+    return true;
+}
+
 export function buildSelfExtracting(
     unzippedInitCode: Buffer,
     zippedInitCode: Buffer,
