@@ -38,6 +38,6 @@ Clicking on **Deploy Wrapper** will prompt you to enter some details about the w
 
 ![deploy-wrapper](./deploy-wrapper.png)
 
-Once the transaction has been mined, you will be prompted to verify the deployed wrapper contract. *It's important not to miss this step*, as having a verified interface to your zipped contract is the entire point of creating a wrapper contract! To proceed, you will need to provide an etherscan API key. If you don't have one, you can visit `etherscan.io` and generate one for free by creating an account. This key will not be stored anywhere. Once you've provided your etherscan API key, the app will provide the contract verification details to etherscan and after a short moment your wrapper contract should be verified!
+Once the transaction has been mined, you will be prompted to verify the deployed wrapper contract. *It's important not to miss this step*, as having a verified interface to your zipped contract is the entire point of creating a wrapper contract! To proceed, you will need to provide an etherscan API key. If you don't have one, you can visit [etherscan.io](https://etherscan.io) and generate one for free by creating an account. This key will not be stored anywhere. Once you've provided your etherscan API key, the app will provide the contract verification details to etherscan and after a short moment your wrapper contract should be verified!
 
 ![verify-wrapper](./verify-wrapper.png)
