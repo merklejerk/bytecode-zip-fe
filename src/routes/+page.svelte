@@ -616,7 +616,7 @@
                     })()}
                 </div>
                 <div class="right-links">
-                    [<a href="https://github.com/merklejerk/bytecode-zip-fe/docs/HELP.md">Help</a>]
+                    [<a href="https://github.com/merklejerk/bytecode-zip-fe/blob/main/docs/HELP.md">Help</a>]
                 </div>
             </div>
         </div>
