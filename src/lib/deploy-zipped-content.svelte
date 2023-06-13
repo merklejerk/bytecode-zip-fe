@@ -105,7 +105,7 @@
             --></a>!
         {:else if pendingTx || submitPromise}
             Deploying zipped contract on
-            <span class="network">{NETWORK_NAMES[CACHE.deployChainId]}</span><!--
+            <span class="network">{NETWORK_NAMES[wallet.chainId]}</span><!--
             -->{#if txUrl} (<a href="{txUrl}" target="_blank">tx</a>){/if}...
         {:else}
             Deploy a {
